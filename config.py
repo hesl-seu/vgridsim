@@ -17,10 +17,9 @@ PATHS = {
     "models_dir": os.path.join(PROJECT_ROOT, "models"),
     "results_dir": os.path.join(PROJECT_ROOT, "results_outputs"),
     "tensorboard_logs": os.path.join(PROJECT_ROOT, "tensorboard_logs"),
-    # ▼▼▼ 【新增】GUI配置文件路径 ▼▼▼
     "gui_settings": os.path.join(PROJECT_ROOT, "gui_settings.json"),
 }
-# 允许通过环境变量覆盖关键路径（开源友好）
+# 允许通过环境变量覆盖关键路径
 import os as _os
 PATHS["models_dir"]        = _os.getenv("MODELS_DIR",        PATHS["models_dir"])
 PATHS["grid_params_excel"] = _os.getenv("GRID_PARAMS_XLSX",  PATHS["grid_params_excel"])
@@ -36,17 +35,17 @@ PATHS["tensorboard_logs"]  = _os.getenv("TB_LOGS_DIR",       PATHS["tensorboard_
 #      GUI界面上保存的参数。
 # ==============================================================================
 CORE_PARAMS = {
-    # --- 时间设置 (保留在GUI) ---
+    # --- 时间设置 ---
     "start_hour": 0,
     "end_hour": 24,
     "step_minutes": 60,
 
-    # --- 配电网模型基础设置 (移至GUI) ---
+    # --- 配电网模型基础设置 ---
     "grid_model": "ieee33",      # 可选: "ieee33", "ieee69", "ieee123"
-    "slack_bus": "b1",          # 等同于旧的 SOURCE_BUS_ID (保持后台配置)
-    "base_power": 1.0,          # 单位 MVA (保持后台配置)
+    "slack_bus": "b1",          # 松弛节点
+    "base_power": 1.0,          # 单位 MVA 
 
-    # --- 配电网组件开关 (移至GUI)---
+    # --- 配电网组件开关 ---
     "distributed_energy": {
         "pv": True,    # 是否包含光伏
         "wind": True,  # 是否包含风电
@@ -55,12 +54,12 @@ CORE_PARAMS = {
     "sop_nodes_active": True,  # 是否包含SOP（软开点）
     "nop_nodes_active": True,  # 是否包含NOP（常开节点）
 
-    # --- 求解器设置 (移至GUI) ---
+    # --- 求解器设置  ---
     "solver": "gurobi",         # 可选: "gurobi", "glpk", "cbc", "scip"
 }
 
 # ==============================================================================
-# 3. Baseline (全局优化) 参数 (无变动)
+# 3. Baseline (全局优化) 参数 
 # ==============================================================================
 BASELINE_PARAMS = {
     "penalty_factors": {
@@ -73,10 +72,10 @@ BASELINE_PARAMS = {
 }
 
 # ==============================================================================
-# 4. 运行模式与评估配置 (无变动)
+# 4. 运行模式与评估配置
 # ==============================================================================
 EVALUATION_CONFIG = {
-    "flow_mode": 'two_stage', # 这个值未来将被GUI的选择覆盖
+    "flow_mode": 'two_stage', 
     "num_test_episodes": 1,
     "standards": {
         "voltage_min_pu": 0.90,
@@ -86,7 +85,7 @@ EVALUATION_CONFIG = {
 }
 
 # ==============================================================================
-# 5. 强化学习环境与奖励函数配置 (无变动)
+# 5. 强化学习环境与奖励函数配置 
 # ==============================================================================
 RL_ENV_CONFIG = {
     "reward_weights": {
@@ -102,7 +101,7 @@ RL_ENV_CONFIG = {
 }
 
 # ==============================================================================
-# 6. 训练过程配置 (无变动)
+# 6. 训练过程配置 
 # ==============================================================================
 TRAINING_CONFIG = {
     "total_timesteps": 100000,
@@ -112,7 +111,7 @@ TRAINING_CONFIG = {
 }
 
 # ==============================================================================
-# 7. 自动计算的派生参数 (无变动)
+# 7. 自动计算的派生参数
 # ==============================================================================
 try:
     _total_duration_hours = CORE_PARAMS['end_hour'] - CORE_PARAMS['start_hour']
