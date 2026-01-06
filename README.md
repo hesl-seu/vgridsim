@@ -26,6 +26,7 @@
 VGridSim/
 ├── fpowerkit/                  # 内置的修改版电力系统建模工具库
 ├── custom_algorithms/          # 用户自定义算法存放目录
+├── models/                     # 存放着已经训练好的RL模型
 ├── data/                       # 仿真数据
 │   ├── grid_parameters.xlsx    # 配电网详细参数配置
 │   └── my_ev_scenarios.csv     # 自定义电动汽车行程数据
@@ -101,6 +102,7 @@ python train_ddpg.py
 
 # 训练 TD3 智能体
 python train_td3.py
+
 ```
 
 ### 方式三：运行最优基准 (Optimal Baseline)
