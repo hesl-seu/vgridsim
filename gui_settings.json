@@ -1,0 +1,13 @@
+{
+    "grid_model": "ieee33",
+    "solver": "gurobi",
+    "start_hour": 0,
+    "end_hour": 23,
+    "step_minutes": 60,
+    "use_pv": true,
+    "use_wind": true,
+    "use_ess": true,
+    "use_sop": true,
+    "use_nop": true,
+    "ev_data_source": "random"
+}
