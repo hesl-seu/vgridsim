@@ -18,7 +18,7 @@ from pyomo.environ import Binary, NonNegativeReals
 from pyomo.opt import SolverStatus, TerminationCondition
 from gev_station import GEVStation
 from pyomo.environ import value  # 确保文件顶部有此导入
-def create_baseline_model(grid: Grid, stations_list, time_steps: int, gui_params: dict): # <--- 接收 station 对象
+def create_baseline_model(grid: Grid, stations_list, time_steps: int, gui_params: dict): 
 
     """
     使用 Pyomo 创建并求解24小时完整的线性化 DistFlow 最优潮流模型。
@@ -98,7 +98,7 @@ def create_baseline_model(grid: Grid, stations_list, time_steps: int, gui_params
             station_boc_initial[i, :] = np.interp(new_time_points, original_time_points, original_boc_initial[i, :])
         all_boc_initial_list.append(station_boc_initial)
 
-        # --- c. 【新增】处理 ev_info 和 spot_to_bus_map ---
+        # --- c. 处理 ev_info 和 spot_to_bus_map ---
         original_arrival_times = original_env.Invalues['ArrivalT']
         original_departure_times = original_env.Invalues['DepartureT']
 
@@ -341,7 +341,7 @@ def add_constraints(model, ev_info, present_cars, boc_initial, original_env, ev_
     # BOC更新约束 (基于EV)
     def boc_ev_update_rule(model, ev_id, t):
         """
-        【v3.0 最终修复版】使用正确的物理公式更新EV BOC，包含时间步长。
+        使用正确的物理公式更新EV BOC，包含时间步长。
         """
         info = ev_info[ev_id]
         step_duration_h = gui_params['step_minutes'] / 60.0  # 获取时间步长（小时）
@@ -394,12 +394,12 @@ def add_constraints(model, ev_info, present_cars, boc_initial, original_env, ev_
 
     def ess_soc_update_rule(model, ess_id, t):
         """
-        【v2.0 修复版】使用正确的物理公式更新ESS SOC。
+        使用正确的物理公式更新ESS SOC。
         """
         ess = next(e for e in esss if e.ID == ess_id)
         step_duration_h = gui_params['step_minutes'] / 60.0
 
-        # 【修复】SOC的变化量 = (功率 * 时间) / 容量
+        # SOC的变化量 = (功率 * 时间) / 容量
         charge_change = (model.ess_charge[ess_id, t] * ess.EC * step_duration_h) / ess.Cap
         discharge_change = (model.ess_discharge[ess_id, t] / ess.ED * step_duration_h) / ess.Cap
 
@@ -413,7 +413,7 @@ def add_constraints(model, ev_info, present_cars, boc_initial, original_env, ev_
     model.ess_p_split_constr = Constraint(model.ESSs, model.T, rule=ess_p_split_rule)
 
 
-    # 新增约束：防止 ESS 同时充电和放电
+    # 防止 ESS 同时充电和放电
     model.ess_charge_or_discharge = Var(model.ESSs, model.T, domain=Binary)
 
     def ess_charge_limit_rule(model, ess_id, t):
@@ -439,10 +439,10 @@ def add_constraints(model, ev_info, present_cars, boc_initial, original_env, ev_
     # 5. 潮流平衡约束（有功和无功）
     @model.Constraint(model.Buses, model.T, doc="有功功率平衡约束")
     def p_balance_rule(model, bus_id, t):
-        # 【修复】根据时间步索引t，计算正确的秒数
+        # 根据时间步索引t，计算正确的秒数
         time_in_seconds = t * gui_params['step_minutes'] * 60
 
-        # --- 注入项 (Sources) ---
+        # --- 注入项  ---
         power_injections = (
                 sum(model.P[l.ID, t] for l in grid.LinesOfTBus(bus_id, only_active=True)) +
                 sum(model.pg[g.ID, t] for g in grid.GensAtBus(bus_id) if g.ID in model.Gens) +
@@ -452,10 +452,10 @@ def add_constraints(model, ev_info, present_cars, boc_initial, original_env, ev_
         power_injections += sum(model.sop_p1[sop.ID, t] - model.sop_loss[sop.ID, t]
                                 for sop in sops if sop.Bus2 == bus_id)
 
-        # --- 流出项 (Ejections) ---
+        # --- 流出项  ---
         power_ejections = (
                 sum(model.P[l.ID, t] for l in grid.LinesOfFBus(bus_id, only_active=True)) +
-                grid.Bus(bus_id).Pd(time_in_seconds) +  # 【修复】使用正确的秒数来获取负荷
+                grid.Bus(bus_id).Pd(time_in_seconds) +  # 使用正确的秒数来获取负荷
                 sum(model.nop_p[nop.ID, t] for nop in nops if nop.Bus1 == bus_id) +
                 sum(model.pev[ev_id, t] for ev_id, info in ev_info.items() if
                     info['spot'] in spot_to_bus_map and spot_to_bus_map[info['spot']] == bus_id) +
@@ -471,7 +471,7 @@ def add_constraints(model, ev_info, present_cars, boc_initial, original_env, ev_
 
     @model.Constraint(model.Buses, model.T, doc="无功功率平衡约束")
     def q_balance_rule(model, bus_id, t):
-        # 【修复】根据时间步索引t，计算正确的秒数
+        # 根据时间步索引t，计算正确的秒数
         time_in_seconds = t * gui_params['step_minutes'] * 60
 
         q_injections = (
@@ -517,7 +517,7 @@ def add_constraints(model, ev_info, present_cars, boc_initial, original_env, ev_
     def sop_loss_rule(model, sop_id, t):
         sop = next(s for s in sops if s.ID == sop_id)
         if sop.active and sop.PMax > 0:
-            # 修正：让损耗只与有功功率P相关，移除Q的影响
+            # 让损耗只与有功功率P相关，移除Q的影响
             return model.sop_loss[sop_id, t] >= sop.LossCoeff * (
                         model.sop_p1[sop_id, t] ** 2) / sop.PMax ** 2
         return Constraint.Skip
@@ -640,7 +640,7 @@ def define_objective_and_solve(model, ev_info, price, buses, gens, pvws, esss, s
 
     model.objective = Objective(rule=objective_rule, sense=minimize)
 
-    # 求解模型 (保持不变)
+    # 求解模型 
     solver = SolverFactory(solver_name)
     solver.options['TimeLimit'] = 300
     solver.options['OutputFlag'] = 1
@@ -713,7 +713,7 @@ def define_objective_and_solve(model, ev_info, price, buses, gens, pvws, esss, s
             "sop_flows": {},
             "nop_status": {},
             "nop_flows": {},
-            # 【新增】初始化spot_powers和ev_powers
+            # 初始化spot_powers和ev_powers
             "spot_powers": {},
             "ev_powers": {}
         }
@@ -728,12 +728,12 @@ def define_objective_and_solve(model, ev_info, price, buses, gens, pvws, esss, s
         for line_id in model.Lines:
             baseline_data["line_powers"][line_id] = [value(model.P[line_id, t]) for t in model.T]
 
-        # --- 【核心修复区域】 ---
-        # 1. 【修改】不再直接读取 pspot，而是先提取新的 pev (分车辆功率)
+  
+        # 1. 不再直接读取 pspot，而是先提取新的 pev (分车辆功率)
         for ev_id in model.EVs:
             baseline_data["ev_powers"][ev_id] = [value(model.pev[ev_id, t]) for t in model.T]
 
-        # 2. 【新增】将分车辆功率（pev）聚合为分充电桩功率（spot_powers），以兼容下游分析
+        # 2. 将分车辆功率（pev）聚合为分充电桩功率（spot_powers），以兼容下游分析
         num_spots = len(list(model.Spots))
         baseline_data["spot_powers"] = {spot_idx: [0.0] * time_steps for spot_idx in range(num_spots)}
         for ev_id, info in ev_info.items():
@@ -742,7 +742,7 @@ def define_objective_and_solve(model, ev_info, price, buses, gens, pvws, esss, s
             for t in range(time_steps):
                 baseline_data["spot_powers"][spot_id][t] += ev_powers_over_time[t]
 
-        # 3. 【修改】从新的 boc_ev 变量中提取BOC，而不是旧的 boc_spot
+        # 3. 从新的 boc_ev 变量中提取BOC，而不是旧的 boc_spot
         charged_count = 0
         for ev_id, info in ev_info.items():
             departure = info["departure"]
@@ -755,7 +755,7 @@ def define_objective_and_solve(model, ev_info, price, buses, gens, pvws, esss, s
             baseline_data["ev_info"][ev_id] = {"initial_boc": info["initial_boc"], "final_boc": final_soc,
                                                "charged": is_charged}
         baseline_data["charged_ev_count"] = charged_count
-        # --- 【核心修复结束】 ---
+
 
         for pvw_id in model.PVWs:
             baseline_data["pvw_powers"][pvw_id] = [value(model.pvw_p[pvw_id, t]) for t in model.T]
