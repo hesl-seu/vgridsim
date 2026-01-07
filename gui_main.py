@@ -211,13 +211,13 @@ class MainWindow(QMainWindow):
         self.rb_eval_two_stage.toggled.connect(self.update_eval_models_list)
         self.eval_button.clicked.connect(self.start_evaluation)
 
-        # --- ▼▼▼ 【新增】连接 EV 场景按钮信号 ▼▼▼ ---
+    
         # 1. 将 "使用外部文件" 单选按钮的切换信号，连接到 "编辑" 按钮的 setEnabled 槽
         #    这样，只有选中 "使用外部文件" 时，"编辑" 按钮才可用
         self.rb_ev_external.toggled.connect(self.edit_ev_scenarios_button.setEnabled)
         # 2. 连接 "编辑 EV 场景文件" 按钮的点击信号到新创建的槽函数
         self.edit_ev_scenarios_button.clicked.connect(self.open_ev_scenarios_file)
-        # --- ▲▲▲ 【新增结束】 ▲▲▲ ---
+
 
     # (save_settings, load_settings, start_training_or_baseline, start_evaluation 无需修改)
     @Slot()
@@ -233,9 +233,8 @@ class MainWindow(QMainWindow):
             "use_ess": self.chk_ess.isChecked(),
             "use_sop": self.chk_sop.isChecked(),
             "use_nop": self.chk_nop.isChecked(),
-            # --- ▼▼▼ 【新增】保存 EV 数据源选择 ▼▼▼ ---
             "ev_data_source": "external" if self.rb_ev_external.isChecked() else "random"
-            # --- ▲▲▲ 【新增结束】 ▲▲▲ ---
+       
         }
         try:
             with open(PATHS["gui_settings"], 'w') as f:
@@ -244,7 +243,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.update_log(f"错误: 保存配置失败: {e}")
 
-    # ▼▼▼ 4. 修改 load_settings 方法 ▼▼▼
+
     def load_settings(self):
         settings = load_gui_settings()
         self.grid_model_combo.setCurrentText(settings.get("grid_model", "ieee33"))
@@ -258,13 +257,13 @@ class MainWindow(QMainWindow):
         self.chk_sop.setChecked(settings.get("use_sop", True))
         self.chk_nop.setChecked(settings.get("use_nop", True))
 
-        # --- ▼▼▼ 【新增】加载 EV 数据源设置 ▼▼▼ ---
+
         ev_source = settings.get("ev_data_source", "random")
         if ev_source == "external":
             self.rb_ev_external.setChecked(True)
         else:
             self.rb_ev_random.setChecked(True)
-        # --- ▲▲▲ 【新增结束】 ▲▲▲ ---
+
 
         self.update_log("已加载配置。")
 
@@ -312,7 +311,7 @@ class MainWindow(QMainWindow):
         self.worker = SimulationWorker(task_type, task_params)
         self.worker.moveToThread(self.thread)
 
-        # ▼▼▼ 【核心修正 3】: 在启动线程前，直接连接按钮信号到worker的槽 ▼▼▼
+        # 在启动线程前，直接连接按钮信号到worker的槽 
         self.stop_button.clicked.connect(self.worker.request_stop)
 
         self.thread.started.connect(self.worker.run)
