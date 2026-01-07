@@ -144,17 +144,17 @@ def main():
     TD3_PARAMS = TRAINING_CONFIG.get("td3_params", {})
 
     # 应用调优建议作为新的默认值
-    learning_rate = float(TD3_PARAMS.get("learning_rate", 3e-5))  # <--- (建议值 1e-4)
-    buffer_size = int(TD3_PARAMS.get("buffer_size", 500_000))  # <--- (建议值 300_000)
-    batch_size = int(TD3_PARAMS.get("batch_size", 512))  # <--- (建议值 256)
-    target_policy_noise = float(TD3_PARAMS.get("target_policy_noise", 0.05))  # <--- (1) 修正名称
+    learning_rate = float(TD3_PARAMS.get("learning_rate", 3e-5)) 
+    buffer_size = int(TD3_PARAMS.get("buffer_size", 500_000)) 
+    batch_size = int(TD3_PARAMS.get("batch_size", 512))  
+    target_policy_noise = float(TD3_PARAMS.get("target_policy_noise", 0.05)) 
     # (TD3 建议) 目标噪声的裁剪范围
-    target_noise_clip = float(TD3_PARAMS.get("target_noise_clip", 0.2))  # <--- (2) 修正名称
-    policy_delay = int(TD3_PARAMS.get("policy_delay", 3))  # (保持默认 2)
-    learning_starts = int(TD3_PARAMS.get("learning_starts", 10_000))  # <--- (建议值 5_000)
+    target_noise_clip = float(TD3_PARAMS.get("target_noise_clip", 0.2))
+    policy_delay = int(TD3_PARAMS.get("policy_delay", 3)) 
+    learning_starts = int(TD3_PARAMS.get("learning_starts", 10_000)) 
 
-    # 建议中 action_noise 的 sigma 为 0.2
-    action_noise_sigma = float(TD3_PARAMS.get("action_noise_sigma", 0.05))  # <--- (建议值 0.2)
+
+    action_noise_sigma = float(TD3_PARAMS.get("action_noise_sigma", 0.05)) 
     # 需要先探测动作维度
     action_dim = train_env.action_space.shape[0]
     action_noise = NormalActionNoise(
@@ -200,8 +200,8 @@ def main():
     agent_name_for_plot = f"TD3_{'Two_Stage' if TWO_STAGE_TRAIN else 'Single_Stage'}"
     cost_curve_cb = CostCurveCallback(
         eval_env=eval_env_raw,
-        agent_name=agent_name_for_plot,  # <--- (1) 添加缺失的 agent_name
-        save_path=BEST_MODEL_DIR,  # <--- (2) 修正参数名 log_dir -> save_path
+        agent_name=agent_name_for_plot, 
+        save_path=BEST_MODEL_DIR,  
         eval_freq=COST_CURVE_EVAL_FREQ
     )
 
