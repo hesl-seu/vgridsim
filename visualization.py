@@ -34,8 +34,8 @@ def export_simulation_data_to_excel(baseline_data, stations_list, params):
     try:
         with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
 
-            # ▼▼▼【核心修改】▼▼▼
-            # 理由：遍历所有充电站，而不仅仅是第一个，以支持多站场景的数据导出。
+ 
+            #遍历所有充电站，而不仅仅是第一个，以支持多站场景的数据导出。
             # --- 工作表1: 充电事件调度表 (甘特图的数据源) ---
             if stations_list:
                 all_events_data = []
@@ -111,11 +111,6 @@ def export_simulation_data_to_excel(baseline_data, stations_list, params):
         print(f"错误：导出到Excel失败 - {e}")
 
 
-# file: visualization.py (请用下面的代码替换文件中的两个同名函数)
-
-# file: visualization.py (请用此函数完整替换旧版本)
-
-# ▼▼▼▼▼ 【最终版函数：根据您的最新要求修改】 ▼▼▼▼▼
 def plot_voltage_snapshots(all_ts_data, seed, gui_params):
     """
     【两阶段对比版】为每个时间步生成一个独立的母线电压对比图。
@@ -133,7 +128,7 @@ def plot_voltage_snapshots(all_ts_data, seed, gui_params):
         print("警告：无法确定有效的步数，跳过电压快照图绘制。")
         return
 
-    # —— 颜色映射（家族级）+ 自动分配 ——
+    # —— 颜色映射+ 自动分配 ——
     algorithms = list(all_ts_data.keys())
 
     def _normalize_algo_name(name: str) -> str:
@@ -210,7 +205,7 @@ def plot_voltage_snapshots(all_ts_data, seed, gui_params):
         # 对母线ID进行自然排序
         sorted_bus_ids = sorted(list(all_bus_ids), key=lambda b: int(''.join(filter(str.isdigit, b)) or 0))
 
-        # 4. 【核心绘图逻辑】为每个算法绘制两条线
+        # 4. 为每个算法绘制两条线
         for algo_name in algorithms:
             ts_data = all_ts_data[algo_name]
             color = algo_colors.get(algo_name, 'gray')  # 获取算法颜色
@@ -254,7 +249,7 @@ def plot_voltage_snapshots(all_ts_data, seed, gui_params):
 
     print(f"✅ 两阶段电压对比快照图已保存至文件夹: {os.path.abspath(output_dir)}")
 
-# ▼▼▼▼▼ 【全新函数 2：潮流分时快照图】 ▼▼▼▼▼
+
 def plot_line_flow_snapshots(all_ts_data, seed, gui_params):
     """
     为每个时间步生成一个独立的线路潮流对比图（柱状图），并保存在新文件夹中。
@@ -319,14 +314,11 @@ def plot_line_flow_snapshots(all_ts_data, seed, gui_params):
         plt.close(fig)
 
     print(f"✅ 线路潮流分时快照图已保存至文件夹: {os.path.abspath(output_dir)}")
-# 文件：visualization.py
-# 请用此函数完整替换旧的 plot_line_flows 函数
 
-# file: visualization.py (请用此函数完整替换旧版本)
 
 def plot_line_flows(all_ts_data, seed, gui_params):
-    """【V4.0 最终正确版】为所有线路有功潮流绘制时序图，并显示最大/最小潮流的包络线。
-    采用与plot_voltage_profiles完全一致的健壮逻辑。
+    """为所有线路有功潮流绘制时序图，并显示最大/最小潮流的包络线。
+    采用与plot_voltage_profiles完全一致的逻辑。
     """
     print("正在生成优化版的线路潮流时序图...")
     try:
@@ -346,7 +338,7 @@ def plot_line_flows(all_ts_data, seed, gui_params):
     for i, (algo_name, ts_data) in enumerate(all_ts_data.items()):
         ax = axes[i, 0]
 
-        # ▼▼▼▼▼ 【核心逻辑：与已修复的电压绘图函数完全一致】 ▼▼▼▼▼
+ 
         # 正确地获取已经统一格式的 "dict of lists"
         line_powers_dict = ts_data.get('line_powers_data', {})
 
@@ -371,7 +363,7 @@ def plot_line_flows(all_ts_data, seed, gui_params):
             ax.plot(time_axis, max_p, color='red', linestyle='--', label=f'最大潮流 ({np.nanmax(max_p):.3f} pu)')
             ax.plot(time_axis, min_p, color='blue', linestyle='--', label=f'最小潮流 ({np.nanmin(min_p):.3f} pu)')
             ax.fill_between(time_axis, min_p, max_p, color='lightgreen', alpha=0.3)
-        # ▲▲▲▲▲ 【修正结束】 ▲▲▲▲▲
+    
 
         ax.set_title(f'算法: {algo_name}')
         ax.set_ylabel('有功潮流 P (pu)')
@@ -563,7 +555,7 @@ def generate_baseline_reports(baseline_data, gui_params):
         flow_df.to_excel(writer, sheet_name='Line_Flows')
 
     print(f"详细的电压与潮流数据已保存至Excel文件: {excel_path}")
-    # ▼▼▼【新增功能】绘制并保存总充电负荷曲线 ▼▼▼
+    # 绘制并保存总充电负荷曲线 
     print("...正在生成总充电负荷曲线图")
     try:
         if spot_powers_data:
@@ -611,9 +603,6 @@ def generate_baseline_reports(baseline_data, gui_params):
         print(f"错误：生成总充电负荷曲线图时失败 - {e}")
 
 
-# --- 请将以下代码完整地添加到 visualization.py 文件的末尾 ---
-
-# (如果文件顶部没有，请确保添加 matplotlib 的 import 语句)
 import matplotlib.pyplot as plt
 import os
 
@@ -681,7 +670,6 @@ def plot_spot_schedule_gantt(stations_list, target_spot_id=0):
     plt.close(fig)  # 关闭图像，防止在后台滞留
 
 
-# --- 请将以下三个函数完整地添加到 visualization.py 文件的末尾 ---
 
 def plot_ess_soc(baseline_data, params):
     """
@@ -804,7 +792,7 @@ def plot_nop_status(baseline_data, params):
 
 def plot_line_flow_snapshots_comparison(all_ts_data, seed, gui_params):
     """
-    【新功能】为每个时间步生成分阶段、多算法的线路潮流对比图。
+    为每个时间步生成分阶段、多算法的线路潮流对比图。
     - 每个时刻一张图，包含上下两个子图，分别代表第一和第二阶段。
     - 每个子图内，用分组柱状图对比各算法的线路潮流。
     """
