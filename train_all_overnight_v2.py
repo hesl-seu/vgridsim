@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 training_all_parallel.py
-并行启动 SAC、DDPG、TD3、PPO 的训练，适合“跑一晚上”。
+并行启动 SAC、DDPG、TD3、PPO 的训练，适合长时间训练。
 - 为每个算法开一个子进程（调用现有 train_*.py）
 - 限制每个进程的 CPU 线程数量
 - 统一归档每个子进程的模型/图表/数据到 runs/<run_id>/<Algo>/artifacts
