@@ -3,7 +3,7 @@
 核心功能是使用Pyomo构建一个全局最优潮流模型（基于线性化的DistFlow），
 一次性计算出在整个仿真周期（例如24小时）内，所有可控设备（发电机、储能、
 充电桩、SOP/NOP等）的最优调度策略，以实现总运行成本的最小化。
-这个计算结果被用作评估强化学习智能体性能的"最优标杆"。
+这个计算结果被用作评估强化学习智能体性能的最优解。
 """
 
 import numpy as np
@@ -17,7 +17,7 @@ from grid_model import load_electricity_price  # 导入以获取电价数据
 from pyomo.environ import Binary, NonNegativeReals
 from pyomo.opt import SolverStatus, TerminationCondition
 from gev_station import GEVStation
-from pyomo.environ import value  # 确保文件顶部有此导入
+from pyomo.environ import value  
 def create_baseline_model(grid: Grid, stations_list, time_steps: int, gui_params: dict): 
 
     """
@@ -320,7 +320,7 @@ def create_baseline_model(grid: Grid, stations_list, time_steps: int, gui_params
 
 def add_constraints(model, ev_info, present_cars, boc_initial, original_env, ev_capacity, buses, lines, gens, pvws,
                     esss, sops, nops, bus_dict, line_dict, gen_dict, pvw_dict, ess_dict, sop_dict, nop_dict, grid,
-                    time_steps, spot_to_bus_map, gui_params): # <--- 在末尾添加 gui_params
+                    time_steps, spot_to_bus_map, gui_params): # 
     """
     (多充电站版)
     添加 Pyomo 模型的约束条件，特别是重构了潮流平衡以支持多个充电站。
