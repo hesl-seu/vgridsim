@@ -10,7 +10,7 @@ import importlib.util
 from PySide6.QtCore import QObject, Signal, Slot
 import pandas as pd
 
-# ▼▼▼ 【关键检查】: 确保此文件中绝对没有 "from gui_main import ..." 这类语句 ▼▼▼
+
 
 # 导入stable_baselines3和环境
 from stable_baselines3 import PPO, DDPG, SAC, TD3
@@ -98,7 +98,7 @@ class SimulationWorker(QObject):
         sys.stderr = Stream(new_text=self.error.emit)
 
         try:
-            # ▼▼▼ 【关键】: 所有耗时操作都在run()函数内部，确保它们在后台线程执行 ▼▼▼
+            #所有耗时操作都在run()函数内部，确保它们在后台线程执行 
             self.progress.emit("后台任务启动，正在准备环境...")
 
             with open(PATHS["gui_settings"], 'r') as f:
@@ -135,11 +135,11 @@ class SimulationWorker(QObject):
         CORE_PARAMS['sop_nodes_active'] = self.gui_params['use_sop']
         CORE_PARAMS['nop_nodes_active'] = self.gui_params['use_nop']
 
-        # --- ▼▼▼ 【新增】将EV数据源设置传递给核心参数 ▼▼▼ ---
+        #将EV数据源设置传递给核心参数
         # 我们从 self.gui_params 中获取这个新设置
         # 如果设置不存在 (例如使用旧的 gui_settings.json)，则默认为 'random'
         CORE_PARAMS['ev_data_source'] = self.gui_params.get('ev_data_source', 'random')
-        # --- ▲▲▲ 【新增结束】 ▲▲▲ ---
+  
 
         self.progress.emit("核心配置已根据GUI设置更新。")
 
@@ -157,7 +157,7 @@ class SimulationWorker(QObject):
         self.progress.emit(f"选择算法: {rl_algo_name}")
         self.progress.emit(f"运行模式: {'两阶段' if use_two_stage else '单阶段'}")
 
-        # ▼▼▼ 【关键】: 环境初始化是一个耗时操作，必须在后台线程中执行 ▼▼▼
+        # 环境初始化是一个耗时操作，必须在后台线程中执行 
         self.progress.emit("正在初始化仿真环境 (这可能需要一些时间)...")
         env = PowerGridEnv(gui_params=CORE_PARAMS, use_two_stage_flow=use_two_stage)
         self.progress.emit("环境初始化完成。")
