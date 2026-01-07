@@ -97,7 +97,7 @@ class PowerGridEnv(gym.Env):
         # self.sop_gen_map = {}
         # if self.sop_list:
         #     for sop in self.sop_list:
-        #         # 【核心修正】不再使用固定的P/Q初始化，而是提供pmin/pmax/qmin/qmax，
+        #         # 不再使用固定的P/Q初始化，而是提供pmin/pmax/qmin/qmax，
         #         # 确保 .Pmin, .Qmin 等属性被正确创建为可调用的函数对象。
         #         gen_bus1 = Generator(id=f"gen_for_{sop.ID}_bus1", busid=sop.Bus1,
         #                              pmin_pu=-sop.PMax, pmax_pu=sop.PMax,
@@ -129,7 +129,7 @@ class PowerGridEnv(gym.Env):
 
         # 2. 为这个新的 grid 实例添加所有必要的虚拟发电机
         if self.use_two_stage_flow:
-            # 【修改】添加用于平衡的虚拟发电机 (创建新实例)
+            # 添加用于平衡的虚拟发电机 (创建新实例)
             if self.VIRTUAL_GEN_ID not in self.grid.GenNames:
                 new_slack_gen = Generator(
                     id=self.VIRTUAL_GEN_ID, busid=self.slack_bus_id,
@@ -142,7 +142,7 @@ class PowerGridEnv(gym.Env):
 
             # 重置时，先清空映射（非常重要）
             self.sop_gen_map = {}
-            # 【修改】为SOP创建新的等效发电机，避免复用旧实例
+            # 为SOP创建新的等效发电机，避免复用旧实例
             if hasattr(self.grid, 'SOPs'):
                 print(f"--- RL Env Reset: 正在为电网实例 {len(self.grid.SOPs)} 对SOP创建新的等效发电机... ---")
                 for sop_id, sop in self.grid.SOPs.items():
@@ -157,7 +157,7 @@ class PowerGridEnv(gym.Env):
 
                     self.grid.AddGen(g1)
                     self.grid.AddGen(g2)
-                    # ▲▲▲ 别忘了把“当前grid里的新实例”塞回映射 ▲▲▲
+ 
                     self.sop_gen_map[sop.ID] = (g1, g2)
 
         self.original_bus_pds = {bus.ID: bus.Pd for bus in self.grid.Buses}
@@ -168,14 +168,14 @@ class PowerGridEnv(gym.Env):
         self.pvw_list = list(self.grid.PVWinds) if hasattr(self.grid, 'PVWinds') else []
         self.sop_list = list(self.grid.SOPs.values()) if hasattr(self.grid, 'SOPs') else []
         self.nop_list = list(self.grid.NOPs.values()) if hasattr(self.grid, 'NOPs') else []
-        # 【新增】重建 NOP 线路映射，将其绑定到“当前 grid”实例
+        # 重建 NOP 线路映射，将其绑定到“当前 grid”实例
         self.nop_line_map = {}
         if self.nop_list:
             for nop in self.nop_list:
                 line_id = f"line_for_{nop.ID}"
                 # 确保 line_id 对应的 line 存在于 self.grid 中 (grid_model.py 保证了这一点)
                 self.nop_line_map[nop.ID] = self.grid.Line(line_id)
-        # ▼▼▼【核心修改】: 替换掉原有的 os.path.exists 检查逻辑 ▼▼▼
+        
 
         # 从 self.params (即 CORE_PARAMS) 获取数据源选择
         # 这个值是由 simulation_runner 设置的，源头是 GUI
@@ -217,7 +217,7 @@ class PowerGridEnv(gym.Env):
                 num_evs = self.stations_info[i]['Num_EVs_to_Generate']
                 station.generate_daily_scenarios(num_evs_to_generate=num_evs)
 
-        # ▲▲▲【核心修改结束】▲▲▲
+
 
         self._prepare_ev_simulation_data()
 
@@ -257,7 +257,7 @@ class PowerGridEnv(gym.Env):
             ev_powers_kw = physical_actions.get('ev_power', [])
             bus_ev_load_pu = {bus.ID: 0.0 for bus in self.grid.Buses}
             for spot_idx, power_kw in enumerate(ev_powers_kw):
-                # 【修改】移除了 'if power_kw > 0' 的条件
+              
                 if abs(power_kw) > 1e-6:  # 检查非零
                     bus_id = self.spot_to_bus_map[spot_idx]
                     power_pu = power_kw / (sb_mva * 1000.0)
@@ -265,7 +265,7 @@ class PowerGridEnv(gym.Env):
                     bus_ev_load_pu[bus_id] += power_pu
             try:
                 for bus_id, ev_load in bus_ev_load_pu.items():
-                    # 【修改】将 'if ev_load > 0' 改为检查非零
+                    
                     if abs(ev_load) > 1e-6:
                         bus = self.grid.Bus(bus_id)
                         original_func = bus.Pd
@@ -273,7 +273,7 @@ class PowerGridEnv(gym.Env):
                         # V2G(负值)会减小Pd, C充(正值)会增加Pd
                         bus.Pd = lambda t, _original_func=original_func, _ev_load=ev_load: _original_func(t) + _ev_load
                 opendss_solver = OpenDSSSolver(self.grid, source_bus=self.params['slack_bus'])
-                # 【修改】将时间步(step)转换成秒(seconds)，与 evaluate_agents.py 保持一致
+                #将时间步(step)转换成秒(seconds)，与 evaluate_agents.py 保持一致
                 time_in_seconds = self.current_step * self.params['step_minutes'] * 60
                 opendss_result_status, opendss_loss_W = opendss_solver.solve(time_in_seconds)
             finally:
@@ -751,7 +751,7 @@ class PowerGridEnv(gym.Env):
         def nop_p_limit2_rule(m, nop_id):
             return m.nop_p[nop_id] >= -M * m.nop_status[nop_id]
 
-        # ... (NOP Q 和 V 的约束类似) ...
+       
 
         # 线路容量约束
         LINE_CAPACITY_PU = 5.0
