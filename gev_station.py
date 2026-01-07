@@ -35,7 +35,7 @@ class GEVStation:
         self.num_spots = num_spots
         self.ev_params = ev_params if ev_params else EVParameters()
         self.daily_sessions: list[EVChargeSession] = []
-        # 【修改】日志中加入ID
+        # 日志中加入ID
         print(f"G-EVs充电站 (ID: {self.station_id}) 已创建，包含 {self.num_spots} 个充电桩。")
     def _is_timeslot_free(self, schedule: list, new_arrival: int, new_departure: int) -> bool:
         """
