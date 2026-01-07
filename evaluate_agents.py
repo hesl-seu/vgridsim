@@ -159,16 +159,15 @@ def run_baseline_stage_two(grid: object, baseline_data: object, gui_params: obje
                 gen1, gen2 = sop_gen_map[sop_id]
                 p_transfer = flow_data['P1'][t]
                 q_transfer = flow_data['Q1'][t]
-                # ▼▼▼ 核心修正点 ▼▼▼
                 loss_transfer = flow_data['Loss'][t]
                 gen1._p, gen1._q = -p_transfer, -q_transfer
                 gen2._p, gen2._q = p_transfer - loss_transfer, q_transfer  # 注入端功率要减去损耗
-                # ▲▲▲ 修正结束 ▲▲▲
+       
 
         spot_powers_data = baseline_data.get('spot_powers', {})
         bus_ev_load_pu = {b.ID: 0.0 for b in grid.Buses}
         for spot_id_num, power_list in spot_powers_data.items():
-            # 【修改】移除了 'and power_list[t] > 0' 的条件
+
             # 只要功率不是0 (无论正负)，都进行处理
             if t < len(power_list) and abs(power_list[t]) > 1e-6:
                 bus_id = spot_to_bus_map.get(spot_id_num)
@@ -180,7 +179,7 @@ def run_baseline_stage_two(grid: object, baseline_data: object, gui_params: obje
         original_load_funcs = {}
         try:
             for bus_id, ev_load in bus_ev_load_pu.items():
-                # 【修改】将 'if ev_load > 0' 改为检查非零
+                # 将 'if ev_load > 0' 改为检查非零
                 # 这样负的 ev_load (V2G) 也能被应用
                 if abs(ev_load) > 1e-6:
                     bus = grid.Bus(bus_id)
@@ -506,7 +505,7 @@ def plot_nop_status(all_ts_data, seed, gui_params):
 
 
 def print_baseline_status_monitor(data, grid, gui_params):
-    """为Baseline的运行结果打印每一步的详细状态监视器 (v4.0 弃光/弃风最终版)"""
+    """为Baseline的运行结果打印每一步的详细状态监视器"""
     print("\n" + "=" * 25 + " Baseline 运行状态监控 " + "=" * 25)
 
     # --- 初始化参数 ---
@@ -710,9 +709,9 @@ def evaluate_baseline(gui_params, seed, stations_list, grid, use_two_stage=False
                 "ESS放电成本": stage_one_data.get('ess_discharge_cost', 0),
         }
         metrics["总成本"] = sum(metrics.values())
-        # ▼▼▼ 【新增】将包含所有惩罚的完整目标函数值也加入到metrics中 ▼▼▼
+        #将包含所有惩罚的完整目标函数值也加入到metrics中
         metrics["总目标值"] = stage_one_data.get('objective_value', metrics["总成本"])
-        # ▲▲▲ 【新增结束】 ▲▲▲
+
         violations = 0
         total_checks = sum(len(v) for v in stage_one_data.get('bus_voltages', {}).values())
         if total_checks > 0:
@@ -816,7 +815,6 @@ def plot_accumulated_costs(all_metrics, all_ts_data, seed, gui_params, grid_for_
 
 def plot_aggregated_ev_power(all_ts_data, seed, gui_params):
     """
-    【最终修正版-正确分离求和】
     绘制包含6条独立曲线的EV总功率图。
     - 先分离每个桩的充/放电功率，然后再分别求和，避免功率对冲。
     """
@@ -1038,9 +1036,9 @@ def plot_and_save_results(all_ts_data, seed, gui_params):
             print("...正在写入'Bus_Voltages'工作表")
             all_buses = set()
             for data in all_ts_data.values():
-                # 修复1: 使用正确的键 'voltages_data_stage2'
+                # 使用正确的键 'voltages_data_stage2'
                 voltages_data_dict = data.get('voltages_data_stage2', {})
-                # 修复2: 检查它是否为字典 (dict)，并从字典的键中更新母线列表
+                # 检查它是否为字典 (dict)，并从字典的键中更新母线列表
                 if voltages_data_dict and isinstance(voltages_data_dict, dict):
                     all_buses.update(voltages_data_dict.keys())
 
