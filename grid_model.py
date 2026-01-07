@@ -428,9 +428,9 @@ def create_ieee_grid(model="ieee33"):
 
 def create_grid(model="ieee33", gui_params=None):
     """
-    (健壮性增强版) 创建完整配电网模型的主函数。
+    创建完整配电网模型的主函数。
 
-    这是一个工厂函数，它按顺序执行以下操作：
+    它按顺序执行以下操作：
     1. 创建一个基础的IEEE电网拓扑。
     2. 手动设置和修正关键的电网基准参数（SB, UB），以保证兼容性。
     3. 调用所有其他的 `load_*` 函数，将Excel中的自定义数据加载并应用到电网对象上。
@@ -483,7 +483,7 @@ def create_grid(model="ieee33", gui_params=None):
         print(
             f"最终发电机配置 {gen.ID} (在母线 {gen.BusID}): RealisticPmax={getattr(gen, 'RealisticPmax', 'N/A')}, CostB={gen.CostB(0)}")
 
-    # 5. [模型处理] 为每个NOP在电网中添加一条对应的、默认不激活的线路。
+    # 5. 为每个NOP在电网中添加一条对应的、默认不激活的线路。
     # 这是为了在优化模型中通过控制这条线路的激活状态来模拟NOP的开断。
     if hasattr(grid, 'NOPs'):
         for nop_id, nop in grid.NOPs.items():
