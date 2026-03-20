@@ -125,8 +125,7 @@ python baseline.py
 
 * **东南大学 胡秦然老师，钱涛老师**
 
-如有问题，欢迎提交 Issue 。
-
+如有问题，欢迎提交 Issue ，也可联系邮件linbash@163.com。
 ```
 
 ```
