@@ -203,11 +203,10 @@ def run_baseline_stage_two(grid: object, baseline_data: object, gui_params: obje
                 gen1, gen2 = sop_gen_map[sop_id]
                 p_transfer = flow_data['P1'][t]
                 q_transfer = flow_data['Q1'][t]
-                # ▼▼▼ 核心修正点 ▼▼▼
                 loss_transfer = flow_data['Loss'][t]
                 gen1._p, gen1._q = -p_transfer, -q_transfer
                 gen2._p, gen2._q = p_transfer - loss_transfer, q_transfer  # 注入端功率要减去损耗
-                # ▲▲▲ 修正结束 ▲▲▲
+         
 
         spot_powers_data = baseline_data.get('spot_powers', {})
         bus_ev_load_pu = {b.ID: 0.0 for b in grid.Buses}
@@ -1447,14 +1446,8 @@ if __name__ == '__main__':
         ]
         existing_display_columns = [col for col in display_columns if col in results_df.columns]
         summary = results_df.groupby('算法')[existing_display_columns].mean()
-        summary_std = results_df.groupby('算法')[existing_display_columns].std()
         print("\n\n" + "=" * 110)
-        print(" " * 45 + "仿 真 评 估 结 果 汇 总 (Mean - 平均值)" + " " * 45)
+        print(" " * 45 + "仿 真 评 估 结 果 汇 总" + " " * 45)
         print("=" * 110)
         print(summary.to_string(float_format="%.4f"))
-
-        print("\n\n" + "=" * 110)
-        print(" " * 45 + "仿 真 评 估 结 果 汇 总 (Std Dev - 标准差)" + " " * 45)
-        print("=" * 110)
-        print(summary_std.to_string(float_format="%.4f"))
         print("=" * 110)
