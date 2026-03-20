@@ -3,7 +3,7 @@
 核心功能是使用Pyomo构建一个全局最优潮流模型（基于线性化的DistFlow），
 一次性计算出在整个仿真周期（例如24小时）内，所有可控设备（发电机、储能、
 充电桩、SOP/NOP等）的最优调度策略，以实现总运行成本的最小化。
-这个计算结果被用作评估强化学习智能体性能的最优解。
+这个计算结果被用作评估强化学习智能体性能的"最优标杆"。
 """
 
 import numpy as np
@@ -17,8 +17,8 @@ from grid_model import load_electricity_price  # 导入以获取电价数据
 from pyomo.environ import Binary, NonNegativeReals
 from pyomo.opt import SolverStatus, TerminationCondition
 from gev_station import GEVStation
-from pyomo.environ import value  
-def create_baseline_model(grid: Grid, stations_list, time_steps: int, gui_params: dict): 
+from pyomo.environ import value  # 确保文件顶部有此导入
+def create_baseline_model(grid: Grid, stations_list, time_steps: int, gui_params: dict): # <--- 接收 station 对象
 
     """
     使用 Pyomo 创建并求解24小时完整的线性化 DistFlow 最优潮流模型。
@@ -162,7 +162,7 @@ def create_baseline_model(grid: Grid, stations_list, time_steps: int, gui_params
     model.ESSs = Set(initialize=[ess.ID for ess in esss])
     model.SOPs = Set(initialize=[sop.ID for sop in sops])
     model.NOPs = Set(initialize=[nop.ID for nop in nops])
-    # 新增一个基于 ev_info 的集合，代表所有独立的充电事件
+    # 基于 ev_info 的集合，代表所有独立的充电事件
     model.EVs = Set(initialize=ev_info.keys())
     model.Spots = RangeSet(0, total_spots_count - 1)# 充电桩编号
 
@@ -320,7 +320,7 @@ def create_baseline_model(grid: Grid, stations_list, time_steps: int, gui_params
 
 def add_constraints(model, ev_info, present_cars, boc_initial, original_env, ev_capacity, buses, lines, gens, pvws,
                     esss, sops, nops, bus_dict, line_dict, gen_dict, pvw_dict, ess_dict, sop_dict, nop_dict, grid,
-                    time_steps, spot_to_bus_map, gui_params): # 
+                    time_steps, spot_to_bus_map, gui_params): # <--- 在末尾添加 gui_params
     """
     (多充电站版)
     添加 Pyomo 模型的约束条件，特别是重构了潮流平衡以支持多个充电站。
@@ -442,7 +442,7 @@ def add_constraints(model, ev_info, present_cars, boc_initial, original_env, ev_
         # 根据时间步索引t，计算正确的秒数
         time_in_seconds = t * gui_params['step_minutes'] * 60
 
-        # --- 注入项  ---
+        # --- 注入项 (Sources) ---
         power_injections = (
                 sum(model.P[l.ID, t] for l in grid.LinesOfTBus(bus_id, only_active=True)) +
                 sum(model.pg[g.ID, t] for g in grid.GensAtBus(bus_id) if g.ID in model.Gens) +
@@ -452,7 +452,7 @@ def add_constraints(model, ev_info, present_cars, boc_initial, original_env, ev_
         power_injections += sum(model.sop_p1[sop.ID, t] - model.sop_loss[sop.ID, t]
                                 for sop in sops if sop.Bus2 == bus_id)
 
-        # --- 流出项  ---
+        # --- 流出项 (Ejections) ---
         power_ejections = (
                 sum(model.P[l.ID, t] for l in grid.LinesOfFBus(bus_id, only_active=True)) +
                 grid.Bus(bus_id).Pd(time_in_seconds) +  # 使用正确的秒数来获取负荷
@@ -483,7 +483,7 @@ def add_constraints(model, ev_info, present_cars, boc_initial, original_env, ev_
         )
         q_ejections = (
                 sum(model.Q[l.ID, t] for l in grid.LinesOfFBus(bus_id, only_active=True)) +
-                grid.Bus(bus_id).Qd(time_in_seconds) +  # 【修复】使用正确的秒数来获取负荷
+                grid.Bus(bus_id).Qd(time_in_seconds) +  # 使用正确的秒数来获取负荷
                 sum(model.sop_q1[sop.ID, t] for sop in sops if sop.Bus1 == bus_id) +
                 sum(model.nop_q[nop.ID, t] for nop in nops if nop.Bus1 == bus_id)
         )
@@ -569,7 +569,7 @@ def add_constraints(model, ev_info, present_cars, boc_initial, original_env, ev_
 
     model.ev_unfull_energy_constr = Constraint(model.EVs, rule=ev_unfull_energy_rule)
 
-    # 10. 线路有功功率上限约束（简化容量限制）
+    # 10. 线路有功功率上限约束
     def line_p_limit_rule(model, line_id, t):
         max_p = 5.0  # 假设每条线路最大有功功率为 3.0 pu，可根据实际情况调整
         return model.P[line_id, t] <= max_p
@@ -599,7 +599,7 @@ def define_objective_and_solve(model, ev_info, price, buses, gens, pvws, esss, s
     定义目标函数，并求解模型
     """
 
-    # 最终修正版：统一了发电机成本模型，并修正了所有成本项的单位。
+    # 统一了发电机成本模型，并修正了所有成本项的单位。
     def objective_rule(model):
         step_duration_h = gui_params['step_minutes'] / 60.0
         sb_mva = grid.SB
@@ -640,7 +640,7 @@ def define_objective_and_solve(model, ev_info, price, buses, gens, pvws, esss, s
 
     model.objective = Objective(rule=objective_rule, sense=minimize)
 
-    # 求解模型 
+    # 求解模型
     solver = SolverFactory(solver_name)
     solver.options['TimeLimit'] = 300
     solver.options['OutputFlag'] = 1
@@ -713,7 +713,7 @@ def define_objective_and_solve(model, ev_info, price, buses, gens, pvws, esss, s
             "sop_flows": {},
             "nop_status": {},
             "nop_flows": {},
-            # 初始化spot_powers和ev_powers
+            #初始化spot_powers和ev_powers
             "spot_powers": {},
             "ev_powers": {}
         }
@@ -728,7 +728,6 @@ def define_objective_and_solve(model, ev_info, price, buses, gens, pvws, esss, s
         for line_id in model.Lines:
             baseline_data["line_powers"][line_id] = [value(model.P[line_id, t]) for t in model.T]
 
-  
         # 1. 不再直接读取 pspot，而是先提取新的 pev (分车辆功率)
         for ev_id in model.EVs:
             baseline_data["ev_powers"][ev_id] = [value(model.pev[ev_id, t]) for t in model.T]
@@ -755,7 +754,6 @@ def define_objective_and_solve(model, ev_info, price, buses, gens, pvws, esss, s
             baseline_data["ev_info"][ev_id] = {"initial_boc": info["initial_boc"], "final_boc": final_soc,
                                                "charged": is_charged}
         baseline_data["charged_ev_count"] = charged_count
-
 
         for pvw_id in model.PVWs:
             baseline_data["pvw_powers"][pvw_id] = [value(model.pvw_p[pvw_id, t]) for t in model.T]

@@ -56,6 +56,34 @@ CORE_PARAMS = {
 
     # --- 求解器设置  ---
     "solver": "gurobi",         # 可选: "gurobi", "glpk", "cbc", "scip"
+    "ev_data_source": "random",
+    "reward_mode": "grid_operator",
+
+    "ev_params": {
+        "capacity_kwh": 70.0,
+        "max_charge_kw": 60.0,
+        "max_discharge_kw": 25.0,
+        "charge_efficiency": 0.95,
+        "discharge_efficiency": 0.90
+    },
+
+    "reward_weights": {
+        "ev_kwh_shortage_penalty": -100.0,
+        "voltage_violation_penalty": -100.0,
+        "cost_penalty_factor": 1.0,
+        "opendss_failure_penalty": -5000.0
+    },
+
+    "station_operator": {
+        "charge_service_price": 1.20,
+        "v2g_subsidy_price": 0.80,
+        "include_grid_cost": False,
+        "include_generation_cost": True,
+        "include_ess_cost": True,
+        "include_sop_loss_cost": True,
+        "include_penalty_cost": True
+    }
+
 }
 
 # ==============================================================================
@@ -109,7 +137,22 @@ TRAINING_CONFIG = {
     "checkpoint_freq": 10000,
     "cost_curve_eval_freq": 240
 }
-
+# ==============================================================================
+# RL 算法超参数配置
+# ==============================================================================
+RL_HYPERPARAMS = {
+    "common": {
+        "learning_rate": 0.0003,
+        "gamma": 0.99,
+        "batch_size": 256
+    },
+    "algo_specific": {
+        "PPO": {"clip_range": 0.2, "ent_coef": 0.0},
+        "SAC": {"tau": 0.005, "ent_coef": 0.1}, # SAC的ent_coef这里先用浮点数代表初始值
+        "DDPG": {"tau": 0.005, "action_noise": 0.1},
+        "TD3": {"policy_delay": 2, "target_policy_noise": 0.2}
+    }
+}
 # ==============================================================================
 # 7. 自动计算的派生参数
 # ==============================================================================
@@ -148,6 +191,25 @@ def load_gui_settings():
             "use_ess": CORE_PARAMS["distributed_energy"]["ess"],
             "use_sop": CORE_PARAMS["sop_nodes_active"],
             "use_nop": CORE_PARAMS["nop_nodes_active"],
+
+            "ev_data_source": CORE_PARAMS["ev_data_source"],
+            "ev_params": CORE_PARAMS["ev_params"],
+            "reward_weights": CORE_PARAMS["reward_weights"],
+            "reward_mode": CORE_PARAMS["reward_mode"],
+            "station_operator": CORE_PARAMS["station_operator"],
+
+
+            "rl_common": {
+                "learning_rate": 0.0003,
+                "gamma": 0.99,
+                "batch_size": 256
+            },
+            "rl_specific": {
+                "PPO": {"clip_range": 0.2, "ent_coef": 0.0},
+                "SAC": {"tau": 0.005, "ent_coef": 0.1},
+                "DDPG": {"tau": 0.005, "action_noise": 0.1},
+                "TD3": {"policy_delay": 2, "target_policy_noise": 0.2}
+            }
         }
         return default_settings
 

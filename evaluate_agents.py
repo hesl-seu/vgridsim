@@ -19,6 +19,50 @@ mpl.rcParams['font.sans-serif'] = ['SimHei']
 mpl.rcParams['axes.unicode_minus'] = False
 import numpy as np
 import re
+
+def calc_station_operator_step_metrics(ev_power_kw, price_t, step_minutes, ev_params, station_cfg, info):
+    import numpy as np
+
+    ev_power_kw = np.asarray(ev_power_kw, dtype=float)
+    charge_kw = np.clip(ev_power_kw, 0.0, None)
+    discharge_kw = np.clip(-ev_power_kw, 0.0, None)
+
+    step_h = step_minutes / 60.0
+    pi_uc = float(station_cfg.get("charge_service_price", 1.20))
+    pi_ud = float(station_cfg.get("v2g_subsidy_price", 0.80))
+    eta_c = max(ev_params.charge_efficiency, 1e-6)
+    eta_d = max(ev_params.discharge_efficiency, 1e-6)
+
+    charge_profit = float(np.sum((pi_uc - price_t) * charge_kw * eta_c * step_h))
+    discharge_profit = float(np.sum((price_t - pi_ud) * discharge_kw / eta_d * step_h))
+    gross_profit = charge_profit + discharge_profit
+
+    extra_cost = 0.0
+    if station_cfg.get("include_grid_cost", False):
+        extra_cost += info.get("grid_purchase_cost", 0.0)
+    if station_cfg.get("include_generation_cost", True):
+        extra_cost += info.get("generation_cost", 0.0)
+    if station_cfg.get("include_ess_cost", True):
+        extra_cost += info.get("ess_discharge_cost", 0.0)
+    if station_cfg.get("include_sop_loss_cost", True):
+        extra_cost += info.get("sop_loss_cost", 0.0)
+
+    penalty_cost = 0.0
+    if station_cfg.get("include_penalty_cost", True):
+        penalty_cost += -info.get("voltage_penalty_unscaled", 0.0)
+        penalty_cost += -info.get("opendss_failure_penalty_unscaled", 0.0)
+        penalty_cost += -info.get("ev_shortage_penalty_unscaled", 0.0)
+
+    net_profit = gross_profit - extra_cost - penalty_cost
+
+    return {
+        "charge_service_profit": charge_profit,
+        "v2g_spread_profit": discharge_profit,
+        "station_gross_profit": gross_profit,
+        "station_extra_cost": extra_cost,
+        "station_penalty_cost": penalty_cost,
+        "station_net_profit": net_profit,
+    }
 # 此函数，用于发现和加载所有算法插件
 def discover_and_load_algorithms():
     """
@@ -114,7 +158,7 @@ def run_baseline_stage_two(grid: object, baseline_data: object, gui_params: obje
             if bus_id in valid_buses:
                 spot_to_bus_map[global_spot_idx] = bus_id
             else:
-                # 这里可以打个提示，方便你在控制台看
+                # 这里可以打个提示，方便在控制台看
                 print(f"警告：充电站 {station_id} 的母线 {bus_id} 不在当前配电网中，跳过这些车位的映射。")
 
         # 注意：不管有没有映射，都要累加 spot_counter，以保持索引和 Baseline 一致
@@ -159,15 +203,15 @@ def run_baseline_stage_two(grid: object, baseline_data: object, gui_params: obje
                 gen1, gen2 = sop_gen_map[sop_id]
                 p_transfer = flow_data['P1'][t]
                 q_transfer = flow_data['Q1'][t]
+                # ▼▼▼ 核心修正点 ▼▼▼
                 loss_transfer = flow_data['Loss'][t]
                 gen1._p, gen1._q = -p_transfer, -q_transfer
                 gen2._p, gen2._q = p_transfer - loss_transfer, q_transfer  # 注入端功率要减去损耗
-       
+                # ▲▲▲ 修正结束 ▲▲▲
 
         spot_powers_data = baseline_data.get('spot_powers', {})
         bus_ev_load_pu = {b.ID: 0.0 for b in grid.Buses}
         for spot_id_num, power_list in spot_powers_data.items():
-
             # 只要功率不是0 (无论正负)，都进行处理
             if t < len(power_list) and abs(power_list[t]) > 1e-6:
                 bus_id = spot_to_bus_map.get(spot_id_num)
@@ -179,7 +223,6 @@ def run_baseline_stage_two(grid: object, baseline_data: object, gui_params: obje
         original_load_funcs = {}
         try:
             for bus_id, ev_load in bus_ev_load_pu.items():
-                # 将 'if ev_load > 0' 改为检查非零
                 # 这样负的 ev_load (V2G) 也能被应用
                 if abs(ev_load) > 1e-6:
                     bus = grid.Bus(bus_id)
@@ -259,11 +302,31 @@ def run_baseline_stage_two(grid: object, baseline_data: object, gui_params: obje
 
 def evaluate_rl_agent(model, env, seed):
     """
-    (最终修正版) 评估单个RL智能体，并返回标准化的指标和时序数据。
+    评估单个RL智能体，并返回标准化的指标和时序数据。
     - 修正了数据日志记录和返回结构，确保函数总能正确返回。
     """
     obs, info = env.reset(seed=seed)
-    metrics = {"购电成本": 0, "发电成本": 0, "SOP损耗成本": 0, "ESS放电成本": 0}
+    metrics = {
+        "购电成本": 0.0,
+        "发电成本": 0.0,
+        "SOP损耗成本": 0.0,
+        "ESS放电成本": 0.0,
+        "环境累计奖励(缩放后)": 0.0,
+        "环境累计奖励(未缩放)": 0.0,
+    }
+
+    reward_mode = env.params.get("reward_mode", "grid_operator")
+    station_cfg = env.params.get("station_operator", {})
+
+    if reward_mode == "station_operator":
+        metrics.update({
+            "充电服务价差收益": 0.0,
+            "V2G价差收益": 0.0,
+            "运营商毛收益": 0.0,
+            "运营商附加成本": 0.0,
+            "运营商惩罚成本": 0.0,
+            "运营商净收益": 0.0,
+        })
 
     # 初始化所有日志记录器
     voltages_stage1_log, voltages_stage2_log = [], []
@@ -295,6 +358,8 @@ def evaluate_rl_agent(model, env, seed):
         obs, reward, terminated, truncated, info = env.step(action)
 
         total_episode_reward += reward
+        metrics["环境累计奖励(缩放后)"] += reward
+        metrics["环境累计奖励(未缩放)"] += info.get("reward_unscaled", reward)
 
         grid_cost = info.get('grid_purchase_cost', 0)
         gen_cost = info.get('generation_cost', 0)
@@ -305,7 +370,37 @@ def evaluate_rl_agent(model, env, seed):
         metrics["发电成本"] += gen_cost
         metrics["SOP损耗成本"] += sop_cost
         metrics["ESS放电成本"] += ess_cost
-        step_costs_log.append(grid_cost + gen_cost + sop_cost + ess_cost)
+        physical_step_cost = grid_cost + gen_cost + sop_cost + ess_cost
+        step_costs_log.append(physical_step_cost)
+
+        if reward_mode == "station_operator":
+            step_station = {}
+            if "station_net_profit" in info:
+                step_station = {
+                    "charge_service_profit": info.get("charge_service_profit", 0.0),
+                    "v2g_spread_profit": info.get("v2g_spread_profit", 0.0),
+                    "station_gross_profit": info.get("station_gross_profit", 0.0),
+                    "station_extra_cost": info.get("station_extra_cost", 0.0),
+                    "station_penalty_cost": info.get("station_penalty_cost", 0.0),
+                    "station_net_profit": info.get("station_net_profit", 0.0),
+                }
+            else:
+                price_t = env.price[env.current_step - 1]
+                step_station = calc_station_operator_step_metrics(
+                    ev_power_kw=info.get("ev_power_kw", []),
+                    price_t=price_t,
+                    step_minutes=env.params["step_minutes"],
+                    ev_params=env.ev_params,
+                    station_cfg=station_cfg,
+                    info=info
+                )
+
+            metrics["充电服务价差收益"] += step_station["charge_service_profit"]
+            metrics["V2G价差收益"] += step_station["v2g_spread_profit"]
+            metrics["运营商毛收益"] += step_station["station_gross_profit"]
+            metrics["运营商附加成本"] += step_station["station_extra_cost"]
+            metrics["运营商惩罚成本"] += step_station["station_penalty_cost"]
+            metrics["运营商净收益"] += step_station["station_net_profit"]
 
         # 分别记录两阶段的电压和潮流
         voltages_stage1_log.append(info.get('voltages_stage1', {}))
@@ -323,7 +418,10 @@ def evaluate_rl_agent(model, env, seed):
     ess_soc_log.append(final_ess_soc)
 
     metrics["总成本"] = sum(metrics[k] for k in ["购电成本", "发电成本", "SOP损耗成本", "ESS放电成本"])
-    metrics["总目标值"] = -total_episode_reward
+    if reward_mode == "station_operator":
+        metrics["总目标值"] = metrics["运营商净收益"]
+    else:
+        metrics["总目标值"] = -metrics["环境累计奖励(未缩放)"]
     metrics["精确总网损(kW)"] = total_loss_kW
 
 
@@ -385,7 +483,7 @@ def evaluate_rl_agent(model, env, seed):
 
 def plot_sop_flows(all_ts_data, seed, gui_params):
     """
-    【增强版】为SOP的有功功率流(P)和无功功率流(Q)创建并列的对比图。
+    为SOP的有功功率流(P)和无功功率流(Q)创建并列的对比图。
     """
     # 查找场景中SOP的数量和ID
     baseline_sops = all_ts_data.get('Baseline', {}).get('raw_baseline_data', {}).get('sop_flows', {})
@@ -404,7 +502,7 @@ def plot_sop_flows(all_ts_data, seed, gui_params):
     num_steps = len(baseline_sops[sop_ids[0]]['P1'])
     time_axis = np.linspace(start_hour, end_hour, num_steps)
 
-    # --- 核心修改：为每个SOP创建一行，每行包含P和Q两个子图 ---
+    # 为每个SOP创建一行，每行包含P和Q两个子图
     fig, axes = plt.subplots(num_sops, 2, figsize=(18, 5 * num_sops), sharex=True, squeeze=False)
     fig.suptitle(f'各算法SOP有功/无功功率调度对比 (场景 Seed: {seed})', fontsize=18, fontproperties="SimHei")
 
@@ -505,7 +603,8 @@ def plot_nop_status(all_ts_data, seed, gui_params):
 
 
 def print_baseline_status_monitor(data, grid, gui_params):
-    """为Baseline的运行结果打印每一步的详细状态监视器"""
+    """为Baseline的运行结果打印每一步的详细状态"""
+    # 正常可以不需要这个函数，供debug使用
     print("\n" + "=" * 25 + " Baseline 运行状态监控 " + "=" * 25)
 
     # --- 初始化参数 ---
@@ -578,7 +677,7 @@ def print_baseline_status_monitor(data, grid, gui_params):
                     [f"{nop_id}: {flow['P'][t] * sb_mva_kw:.2f} kW" for nop_id, flow in nop_flows_data.items()])
                 print(f"    └─ NOP 传输有功: {nop_details}")
 
-        # --- 4. 新增：可再生能源利用与弃用分析 ---
+        # 可再生能源利用与弃用分析
         time_in_seconds = t * step_seconds
 
         # 计算理论最大出力
@@ -671,14 +770,10 @@ def evaluate_baseline(gui_params, seed, stations_list, grid, use_two_stage=False
                     "EV充电满足率(%)"]}
         return metrics, {}
 
-
-
-
     if use_two_stage:
         metrics, time_series_data = run_baseline_stage_two(grid, stage_one_data, gui_params)
 
-
-        # 理由：从第一阶段的结果中提取数据，以保持与RL Agent和单阶段模式的数据结构兼容，从而让绘图函数能够正常工作。
+        #从第一阶段的结果中提取数据，以保持与RL Agent和单阶段模式的数据结构兼容，从而让绘图函数能够正常工作。
         time_series_data["pvw_pu"] = np.array(list(stage_one_data.get('pvw_powers', {}).values())).T
         time_series_data["ess_soc_percent"] = np.array(list(stage_one_data.get('ess_soc', {}).values())).T * 100
         time_series_data["spot_kw"] = np.array(list(stage_one_data.get('spot_powers', {}).values())).T * (
@@ -711,7 +806,6 @@ def evaluate_baseline(gui_params, seed, stations_list, grid, use_two_stage=False
         metrics["总成本"] = sum(metrics.values())
         #将包含所有惩罚的完整目标函数值也加入到metrics中
         metrics["总目标值"] = stage_one_data.get('objective_value', metrics["总成本"])
-
         violations = 0
         total_checks = sum(len(v) for v in stage_one_data.get('bus_voltages', {}).values())
         if total_checks > 0:
@@ -837,7 +931,7 @@ def plot_aggregated_ev_power(all_ts_data, seed, gui_params):
     # 开始绘图
     fig, ax = plt.subplots(figsize=(15, 8))
 
-    # —— 颜色映射（家族级）+ 自动分配 ——
+    # —— 颜色映射+ 自动分配 ——
     algorithms = list(all_ts_data.keys())
 
     def _normalize_algo_name(name: str) -> str:
@@ -891,7 +985,6 @@ def plot_aggregated_ev_power(all_ts_data, seed, gui_params):
         # spot_powers 的维度是 (时间步数, 充电桩数量)
         spot_powers = ts_data['spot_kw']
 
-        # --------------------------------------------------------------------
         # 1. 先在每个充电桩的层面上，分离出充电功率（正值）和放电功率（负值）
         all_charge_powers = np.maximum(spot_powers, 0)
         all_discharge_powers = np.minimum(spot_powers, 0)
@@ -899,8 +992,6 @@ def plot_aggregated_ev_power(all_ts_data, seed, gui_params):
         # 2. 然后，再沿着充电桩的维度（axis=1）分别求和
         total_charge_curve = np.sum(all_charge_powers, axis=1)
         total_discharge_curve = np.sum(all_discharge_powers, axis=1)
-        # --------------------------------------------------------------------
-
 
         # 获取该算法的基础颜色
         color = algo_colors.get(algo_name, 'gray')
@@ -1036,7 +1127,6 @@ def plot_and_save_results(all_ts_data, seed, gui_params):
             print("...正在写入'Bus_Voltages'工作表")
             all_buses = set()
             for data in all_ts_data.values():
-                # 使用正确的键 'voltages_data_stage2'
                 voltages_data_dict = data.get('voltages_data_stage2', {})
                 # 检查它是否为字典 (dict)，并从字典的键中更新母线列表
                 if voltages_data_dict and isinstance(voltages_data_dict, dict):
@@ -1056,9 +1146,8 @@ def plot_and_save_results(all_ts_data, seed, gui_params):
                 for bus_id in sorted_buses:
                     for algo_name, ts_data in all_ts_data.items():
                         col_name = f"{algo_name}_{bus_id}_V(pu)"
-                        # 修复3: 使用正确的键 'voltages_data_stage2'
                         voltages_data_dict = ts_data.get('voltages_data_stage2', {})
-                        # 修复4: 数据现在是 dict[list]，直接用 bus_id 作为键来获取电压列表
+                        # 数据现在是 dict[list]，直接用 bus_id 作为键来获取电压列表
                         voltage_list = voltages_data_dict.get(bus_id, [np.nan] * num_steps)
                         # 确保列表长度与时间步一致
                         voltage_df_data[col_name] = voltage_list[:num_steps]
@@ -1069,9 +1158,7 @@ def plot_and_save_results(all_ts_data, seed, gui_params):
             print("...正在写入'Line_Flows'工作表")
             all_lines = set()
             for data in all_ts_data.values():
-                # 修复1: 使用正确的键 'line_powers_data_stage2'
                 flows_data_dict = data.get('line_powers_data_stage2', {})
-                # 修复2: 检查它是否为字典 (dict)
                 if flows_data_dict and isinstance(flows_data_dict, dict):
                     all_lines.update(flows_data_dict.keys())
 
@@ -1088,9 +1175,7 @@ def plot_and_save_results(all_ts_data, seed, gui_params):
                 for line_id in sorted_lines:
                     for algo_name, ts_data in all_ts_data.items():
                         col_name = f"{algo_name}_{line_id}_P(pu)"
-                        # 修复3: 使用正确的键 'line_powers_data_stage2'
                         flow_data_dict = ts_data.get('line_powers_data_stage2', {})
-                        # 修复4: 数据现在是 dict[list]，直接用 line_id 作为键来获取功率列表
                         flow_list = flow_data_dict.get(line_id, [np.nan] * num_steps)
                         flow_df_data[col_name] = flow_list[:num_steps]
 
@@ -1116,7 +1201,7 @@ def plot_and_save_results(all_ts_data, seed, gui_params):
                                 sop_df_data[f"{algo_name}_{sop_id}_Q(pu)"] = sop_q_data[:, sop_idx]
                 pd.DataFrame(sop_df_data).to_excel(writer, sheet_name='SOP_Flows', index=False)
 
-            # 【新增NOP数据保存】
+            # NOP数据保存
             print("...正在写入'NOP_Status'工作表")
             baseline_nops = all_ts_data.get('Baseline', {}).get('raw_baseline_data', {}).get('nop_status', {})
             if baseline_nops:
@@ -1191,7 +1276,7 @@ if __name__ == '__main__':
     print(f"{'=' * 35}\n")
 
     # =================================================================================
-    # 2. 【插件化核心】动态发现和加载所有可用的算法类
+    # 2. 动态发现和加载所有可用的算法类
     #    - 首先加载stable_baselines3的内置算法作为基础。
     #    - 然后扫描 custom_algorithms/ 文件夹，加载所有用户自定义的算法插件。
     # =================================================================================
@@ -1287,7 +1372,7 @@ if __name__ == '__main__':
         exit()
 
     # =================================================================================
-    # 5. 主评估循环 (此部分逻辑与原来保持一致)
+    # 5. 主评估循环
     #    - 遍历所有测试场景 (episodes)。
     #    - 在每个场景中，依次运行 Baseline 和所有已发现的RL模型。
     #    - 为每个场景生成图表和数据文件。

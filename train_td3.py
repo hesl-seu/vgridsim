@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 文件: train_td3.py
-说明: TD3 训练脚本（对齐 config.py 的参数；不再硬编码 step_minutes 等时间设置）
+说明: TD3 训练脚本（对齐 config.py 的参数）
 依赖:
   - stable_baselines3
   - 项目内: power_grid_env.py, config.py, training_visualizer.py
@@ -27,7 +27,6 @@ def make_env(use_two_stage: bool):
     """
     构造单个环境实例:
     - 所有“时间相关”的参数都来自 config.py / GUI 设置文件
-    - 不在脚本内硬编码 start_hour/end_hour/step_minutes
     """
     # GUI 优先、无则回退到 CORE_PARAMS 的默认值
     gui_params = load_gui_settings()
@@ -49,6 +48,12 @@ def make_env(use_two_stage: bool):
         # 其它你在 env 里需要的键可以继续从 CORE_PARAMS 中拿
         "slack_bus": CORE_PARAMS.get("slack_bus", "b1"),
         "base_power": CORE_PARAMS.get("base_power", 1.0),
+        "ev_data_source": gui_params.get("ev_data_source", CORE_PARAMS.get("ev_data_source", "random")),
+        "ev_params": gui_params.get("ev_params", CORE_PARAMS.get("ev_params", {})),
+        "reward_weights": gui_params.get("reward_weights", CORE_PARAMS.get("reward_weights", {})),
+        "reward_mode": gui_params.get("reward_mode", CORE_PARAMS.get("reward_mode", "grid_operator")),
+        "station_operator": gui_params.get("station_operator", CORE_PARAMS.get("station_operator", {})),
+
     }
 
     # 创建环境；两阶段开关从 TRAINING_CONFIG 读取，也允许函数入参覆盖
@@ -127,7 +132,7 @@ def main():
         # 设定随机种子
         np.random.seed(RANDOM_SEED)
         try:
-            train_env.seed(RANDOM_SEED)  # 一些 SB3 版本无此方法，包一层
+            train_env.seed(RANDOM_SEED)
         except Exception:
             pass
         try:
@@ -144,17 +149,15 @@ def main():
     TD3_PARAMS = TRAINING_CONFIG.get("td3_params", {})
 
     # 应用调优建议作为新的默认值
-    learning_rate = float(TD3_PARAMS.get("learning_rate", 3e-5)) 
-    buffer_size = int(TD3_PARAMS.get("buffer_size", 500_000)) 
-    batch_size = int(TD3_PARAMS.get("batch_size", 512))  
-    target_policy_noise = float(TD3_PARAMS.get("target_policy_noise", 0.05)) 
-    # (TD3 建议) 目标噪声的裁剪范围
+    learning_rate = float(TD3_PARAMS.get("learning_rate", 3e-5))
+    buffer_size = int(TD3_PARAMS.get("buffer_size", 500_000))
+    batch_size = int(TD3_PARAMS.get("batch_size", 512))
+    target_policy_noise = float(TD3_PARAMS.get("target_policy_noise", 0.05))
+    # 目标噪声的裁剪范围
     target_noise_clip = float(TD3_PARAMS.get("target_noise_clip", 0.2))
-    policy_delay = int(TD3_PARAMS.get("policy_delay", 3)) 
-    learning_starts = int(TD3_PARAMS.get("learning_starts", 10_000)) 
-
-
-    action_noise_sigma = float(TD3_PARAMS.get("action_noise_sigma", 0.05)) 
+    policy_delay = int(TD3_PARAMS.get("policy_delay", 3))
+    learning_starts = int(TD3_PARAMS.get("learning_starts", 10_000))
+    action_noise_sigma = float(TD3_PARAMS.get("action_noise_sigma", 0.05))
     # 需要先探测动作维度
     action_dim = train_env.action_space.shape[0]
     action_noise = NormalActionNoise(
@@ -168,16 +171,16 @@ def main():
         learning_rate=learning_rate,
         buffer_size=buffer_size,
         batch_size=batch_size,
-        target_policy_noise=target_policy_noise,  # <--- (1) 修正
+        target_policy_noise=target_policy_noise,
         target_noise_clip=target_noise_clip,
         policy_delay=policy_delay,
-        action_noise=action_noise,  # (使用上面创建的 action_noise 实例)
+        action_noise=action_noise,
         learning_starts=learning_starts,
         train_freq=(1, "step"),
         tensorboard_log=TENSORBOARD_LOG_DIR,
         verbose=1,
         seed=RANDOM_SEED,
-        # 你可以在此加入 TD3 的其它超参（如学习率、批大小等），也可统一放到 TRAINING_CONFIG 扩展读取
+        # 可以在此加入 TD3 的其它超参（如学习率、批大小等），也可统一放到 TRAINING_CONFIG 扩展读取
     )
 
     # ============== 回调：评估、checkpoint、成本曲线 ==============
@@ -200,8 +203,8 @@ def main():
     agent_name_for_plot = f"TD3_{'Two_Stage' if TWO_STAGE_TRAIN else 'Single_Stage'}"
     cost_curve_cb = CostCurveCallback(
         eval_env=eval_env_raw,
-        agent_name=agent_name_for_plot, 
-        save_path=BEST_MODEL_DIR,  
+        agent_name=agent_name_for_plot,
+        save_path=BEST_MODEL_DIR,
         eval_freq=COST_CURVE_EVAL_FREQ
     )
 

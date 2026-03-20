@@ -40,6 +40,11 @@ def make_env(use_two_stage: bool):
         "nop_nodes_active": gui_params.get("use_nop", CORE_PARAMS.get("nop_nodes_active", True)),
         "slack_bus": CORE_PARAMS.get("slack_bus", "b1"),
         "base_power": CORE_PARAMS.get("base_power", 1.0),
+        "ev_data_source": gui_params.get("ev_data_source", CORE_PARAMS.get("ev_data_source", "random")),
+        "ev_params": gui_params.get("ev_params", CORE_PARAMS.get("ev_params", {})),
+        "reward_weights": gui_params.get("reward_weights", CORE_PARAMS.get("reward_weights", {})),
+        "reward_mode": gui_params.get("reward_mode", CORE_PARAMS.get("reward_mode", "grid_operator")),
+        "station_operator": gui_params.get("station_operator", CORE_PARAMS.get("station_operator", {})),
     }
     return PowerGridEnv(gui_params=params, use_two_stage_flow=use_two_stage)
 
@@ -129,8 +134,6 @@ def main():
         verbose=1,
         seed=RANDOM_SEED,
         action_noise=action_noise,
-
-        # ===== 仅超参数修改开始 =====
         learning_rate=1e-3,  # 学不动→先用 1e-3；若不稳再降到 3e-4
         buffer_size=200_000,  # 更大经验缓冲，提升样本多样性
         learning_starts=2_000,  # 先攒 2k 步再训练，避免早期过拟合噪声
@@ -140,7 +143,6 @@ def main():
         train_freq=(1, "step"),  # 每步收集后就触发更新
         gradient_steps=2,  # 每次更新做 2 个梯度步（学不动→2~4，不稳→1）
         policy_kwargs=dict(net_arch=[256, 256]),  # 更厚一点的 MLP
-        # ===== 仅超参数修改结束 =====
     )
 
     # 回调
@@ -159,8 +161,8 @@ def main():
 
     cost_curve_cb = CostCurveCallback(
         eval_env=eval_env_raw,
-        agent_name=agent_name_for_plot,  # <--- (1) 添加缺失的 agent_name
-        save_path=BEST_MODEL_DIR,  # <--- (2) 修正参数名 log_dir -> save_path
+        agent_name=agent_name_for_plot,
+        save_path=BEST_MODEL_DIR,
         eval_freq=COST_CURVE_EVAL_FREQ
     )
 

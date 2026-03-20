@@ -23,17 +23,35 @@ class PowerGridEnv(gym.Env):
         super().__init__()
         self.params = gui_params
         self.use_two_stage_flow = use_two_stage_flow
-        self.reward_weights = RL_ENV_CONFIG["reward_weights"]
+        # 奖励权重
+        self.reward_weights = dict(RL_ENV_CONFIG["reward_weights"])
+        self.reward_weights.update(self.params.get("reward_weights", {}))
         self.reward_scale = RL_ENV_CONFIG.get("reward_scale", 1.0)
+        self.failure_penalty = self.params.get("reward_weights", {}).get(
+            "opendss_failure_penalty",
+            RL_ENV_CONFIG["penalties"]["opendss_failure_penalty"]
+        )
+
+        # 奖励模式 / 运营商参数
+        self.reward_mode = self.params.get("reward_mode", "grid_operator")
+        self.station_operator_cfg = self.params.get("station_operator", {})
         self.stations_info = load_station_info()
         if not self.stations_info:
             raise ValueError("未能从参数文件中加载任何充电站信息！")
+        ev_cfg = self.params.get("ev_params", {})
+
         self.stations_list = []
         for info in self.stations_info:
-            # 创建时直接传入 station_id
             station = GEVStation(
                 station_id=info['Station_ID'],
-                num_spots=info['Num_Spots']
+                num_spots=info['Num_Spots'],
+                ev_params=EVParameters(
+                    capacity_kwh=ev_cfg.get("capacity_kwh", 70.0),
+                    max_charge_kw=ev_cfg.get("max_charge_kw", 60.0),
+                    max_discharge_kw=ev_cfg.get("max_discharge_kw", 25.0),
+                    charge_efficiency=ev_cfg.get("charge_efficiency", 0.95),
+                    discharge_efficiency=ev_cfg.get("discharge_efficiency", 0.90),
+                )
             )
             station.bus_id = info['Bus_ID']
             self.stations_list.append(station)
@@ -89,32 +107,6 @@ class PowerGridEnv(gym.Env):
         self.ev_present = None
         self.ev_boc = None
         self.active_session_map = {}
-        # self.nop_line_map = {}
-        # if self.nop_list:
-        #     for nop in self.nop_list:
-        #         line_id_for_nop = f"line_for_{nop.ID}"
-        #         self.nop_line_map[nop.ID] = self.grid_template.Line(line_id_for_nop)
-        # self.sop_gen_map = {}
-        # if self.sop_list:
-        #     for sop in self.sop_list:
-        #         # 不再使用固定的P/Q初始化，而是提供pmin/pmax/qmin/qmax，
-        #         # 确保 .Pmin, .Qmin 等属性被正确创建为可调用的函数对象。
-        #         gen_bus1 = Generator(id=f"gen_for_{sop.ID}_bus1", busid=sop.Bus1,
-        #                              pmin_pu=-sop.PMax, pmax_pu=sop.PMax,
-        #                              qmin_pu=-sop.QMax, qmax_pu=sop.QMax,
-        #                              costA=0, costB=0, costC=0)
-        #         gen_bus2 = Generator(id=f"gen_for_{sop.ID}_bus2", busid=sop.Bus2,
-        #                              pmin_pu=-sop.PMax, pmax_pu=sop.PMax,
-        #                              qmin_pu=-sop.QMax, qmax_pu=sop.QMax,
-        #                              costA=0, costB=0, costC=0)
-        #
-        #         # 为这两个发电机也添加 RealisticPmax 属性，保持与 baseline 一致
-        #         gen_bus1.RealisticPmax = sop.PMax
-        #         gen_bus2.RealisticPmax = sop.PMax
-        #
-        #         self.grid_template.AddGen(gen_bus1)
-        #         self.grid_template.AddGen(gen_bus2)
-        #         self.sop_gen_map[sop.ID] = (gen_bus1, gen_bus2)
 
     def reset(self, *, seed=None, options=None):
         super().reset(seed=seed)
@@ -140,7 +132,7 @@ class PowerGridEnv(gym.Env):
                 self.grid.AddGen(new_slack_gen)
             print(f"--- RL Env Reset: 已为两阶段模式创建新的虚拟发电机到 '{self.slack_bus_id}'。 ---")
 
-            # 重置时，先清空映射（非常重要）
+            # 重置时，先清空映射
             self.sop_gen_map = {}
             # 为SOP创建新的等效发电机，避免复用旧实例
             if hasattr(self.grid, 'SOPs'):
@@ -157,7 +149,6 @@ class PowerGridEnv(gym.Env):
 
                     self.grid.AddGen(g1)
                     self.grid.AddGen(g2)
- 
                     self.sop_gen_map[sop.ID] = (g1, g2)
 
         self.original_bus_pds = {bus.ID: bus.Pd for bus in self.grid.Buses}
@@ -175,7 +166,6 @@ class PowerGridEnv(gym.Env):
                 line_id = f"line_for_{nop.ID}"
                 # 确保 line_id 对应的 line 存在于 self.grid 中 (grid_model.py 保证了这一点)
                 self.nop_line_map[nop.ID] = self.grid.Line(line_id)
-        
 
         # 从 self.params (即 CORE_PARAMS) 获取数据源选择
         # 这个值是由 simulation_runner 设置的，源头是 GUI
@@ -218,7 +208,6 @@ class PowerGridEnv(gym.Env):
                 station.generate_daily_scenarios(num_evs_to_generate=num_evs)
 
 
-
         self._prepare_ev_simulation_data()
 
         return self._get_observation(), {}
@@ -257,7 +246,7 @@ class PowerGridEnv(gym.Env):
             ev_powers_kw = physical_actions.get('ev_power', [])
             bus_ev_load_pu = {bus.ID: 0.0 for bus in self.grid.Buses}
             for spot_idx, power_kw in enumerate(ev_powers_kw):
-              
+                # 移除了 'if power_kw > 0' 的条件
                 if abs(power_kw) > 1e-6:  # 检查非零
                     bus_id = self.spot_to_bus_map[spot_idx]
                     power_pu = power_kw / (sb_mva * 1000.0)
@@ -265,7 +254,7 @@ class PowerGridEnv(gym.Env):
                     bus_ev_load_pu[bus_id] += power_pu
             try:
                 for bus_id, ev_load in bus_ev_load_pu.items():
-                    
+                    # 将 'if ev_load > 0' 改为检查非零
                     if abs(ev_load) > 1e-6:
                         bus = self.grid.Bus(bus_id)
                         original_func = bus.Pd
@@ -273,7 +262,7 @@ class PowerGridEnv(gym.Env):
                         # V2G(负值)会减小Pd, C充(正值)会增加Pd
                         bus.Pd = lambda t, _original_func=original_func, _ev_load=ev_load: _original_func(t) + _ev_load
                 opendss_solver = OpenDSSSolver(self.grid, source_bus=self.params['slack_bus'])
-                #将时间步(step)转换成秒(seconds)，与 evaluate_agents.py 保持一致
+                # 将时间步(step)转换成秒(seconds)，与 evaluate_agents.py 保持一致
                 time_in_seconds = self.current_step * self.params['step_minutes'] * 60
                 opendss_result_status, opendss_loss_W = opendss_solver.solve(time_in_seconds)
             finally:
@@ -298,10 +287,9 @@ class PowerGridEnv(gym.Env):
                 standards = EVALUATION_CONFIG["standards"]
                 violations = sum(1 for v in voltages_stage2.values()
                                  if not (standards["voltage_min_pu"] <= v <= standards["voltage_max_pu"]))
-                voltage_penalty = violations * self.reward_weights["voltage_violation_penalty"]
-
+                voltage_penalty = self._get_voltage_penalty(voltages_stage2)
                 base_reward = -total_cost * self.reward_weights["cost_penalty_factor"] + voltage_penalty
-                reward_unscaled = base_reward
+
                 info = {
                     'grid_purchase_cost': precise_grid_cost,
                     'generation_cost': generation_cost,
@@ -314,15 +302,26 @@ class PowerGridEnv(gym.Env):
                     'pvw_power_pu': physical_actions.get('pvw_power', []),
                     'ev_power_kw': physical_actions.get('ev_power', []),
                     'opendss_loss_W': opendss_loss_W,
-                    # 新增几项，方便后处理
                     'total_cost': total_cost,
                     'voltage_penalty_unscaled': voltage_penalty,
+                    'opendss_failure_penalty_unscaled': 0.0,
                     'base_reward_unscaled': base_reward,
+                    'reward_mode': self.reward_mode,
+                    'opendss_failed': False,
                 }
+
+                if self.reward_mode == "station_operator":
+                    reward_unscaled = self._calculate_station_operator_reward(
+                        physical_actions=physical_actions,
+                        price_now=price_now,
+                        info=info
+                    )
+                else:
+                    reward_unscaled = base_reward
             else:
                 total_cost = distflow_results.get('total_cost', 1e7)
-                failure_penalty = RL_ENV_CONFIG["penalties"]["opendss_failure_penalty"]
-                reward_unscaled = -total_cost * self.reward_weights["cost_penalty_factor"] + failure_penalty
+                failure_penalty = self.failure_penalty
+                base_reward = -total_cost * self.reward_weights["cost_penalty_factor"] + failure_penalty
 
                 info = {
                     'grid_purchase_cost': distflow_results.get('grid_purchase_cost', 0),
@@ -330,33 +329,73 @@ class PowerGridEnv(gym.Env):
                     'ess_discharge_cost': distflow_results.get('ess_discharge_cost', 0),
                     'sop_loss_cost': distflow_results.get('sop_loss_cost', 0),
                     'voltages_stage1': voltages_stage1,
-                    'voltages_stage2': voltages_stage1,  # 没有OpenDSS结果，只能复用
+                    'voltages_stage2': voltages_stage1,
                     'line_powers_stage1': distflow_results.get('line_powers', {}),
                     'line_powers_stage2': {},
                     'pvw_power_pu': physical_actions.get('pvw_power', []),
                     'ev_power_kw': physical_actions.get('ev_power', []),
                     'opendss_loss_W': 0.0,
                     'total_cost': total_cost,
-                    'base_reward_unscaled': reward_unscaled,
+                    'voltage_penalty_unscaled': 0.0,
+                    'opendss_failure_penalty_unscaled': failure_penalty,
+                    'base_reward_unscaled': base_reward,
+                    'reward_mode': self.reward_mode,
+                    'opendss_failed': True,
                 }
+
+                if self.reward_mode == "station_operator":
+                    reward_unscaled = self._calculate_station_operator_reward(
+                        physical_actions=physical_actions,
+                        price_now=self.price[self.current_step],
+                        info=info
+                    )
+                else:
+                    reward_unscaled = base_reward
         else:
             optimization_results = self._solve_optimal_flow_for_step(physical_actions)
             cost = optimization_results.get('total_cost', 1e7)
             voltages = optimization_results.get('voltages', {})
             # 单阶段时，基础reward也作为“未缩放 reward”
-            reward_unscaled = self._calculate_base_reward(cost, voltages)
+            voltage_penalty = self._get_voltage_penalty(voltages)
+            base_reward = -cost * self.reward_weights["cost_penalty_factor"] + voltage_penalty
+
             info = {
+                'grid_purchase_cost': optimization_results.get('grid_purchase_cost', 0),
+                'generation_cost': optimization_results.get('generation_cost', 0),
+                'ess_discharge_cost': optimization_results.get('ess_discharge_cost', 0),
+                'sop_loss_cost': optimization_results.get('sop_loss_cost', 0),
                 'total_cost': cost,
-                'base_reward_unscaled': reward_unscaled,
+                'voltage_penalty_unscaled': voltage_penalty,
+                'opendss_failure_penalty_unscaled': 0.0,
+                'base_reward_unscaled': base_reward,
+                'reward_mode': self.reward_mode,
+                'ev_power_kw': physical_actions.get('ev_power', []),
+                'opendss_failed': False,
             }
 
-            # --------- EV SOC & 充电惩罚部分，仍然在“未缩放 reward”上累加 ----------
-        self._update_bocs(physical_actions)
-        reward_unscaled += self._check_departures_and_get_reward()
+            if self.reward_mode == "station_operator":
+                reward_unscaled = self._calculate_station_operator_reward(
+                    physical_actions=physical_actions,
+                    price_now=self.price[self.current_step],
+                    info=info
+                )
+            else:
+                reward_unscaled = base_reward
 
-        # --------- 最后一步：做统一缩放，给RL用的是 scaled_reward ----------
+        # --------- EV SOC & 充电惩罚部分，仍然在“未缩放 reward”上累加 ----------
+        self._update_bocs(physical_actions)
+
+        departure_penalty = self._check_departures_and_get_reward()
+        info['ev_shortage_penalty_unscaled'] = departure_penalty
+
+        if self.reward_mode == "station_operator":
+            if self.station_operator_cfg.get("include_penalty_cost", True):
+                reward_unscaled += departure_penalty
+        else:
+            reward_unscaled += departure_penalty
+
         reward = reward_unscaled * self.reward_scale
-        info['reward_unscaled'] = reward_unscaled  # 方便你后面对比
+        info['reward_unscaled'] = reward_unscaled
 
         self.current_step += 1
         terminated = self.current_step >= self.total_timesteps
@@ -390,14 +429,64 @@ class PowerGridEnv(gym.Env):
         for i, ess in enumerate(self.ess_list):
             ess.P = ess_powers_pu[i]
 
-    def _calculate_base_reward(self, cost, voltages):
-        """计算基础奖励：运营成本和电压惩罚"""
-        reward = -cost * self.reward_weights["cost_penalty_factor"]
+    def _get_voltage_penalty(self, voltages):
         standards = EVALUATION_CONFIG["standards"]
-        violations = sum(1 for v in voltages.values()
-                         if not (standards["voltage_min_pu"] <= v <= standards["voltage_max_pu"]))
-        reward += violations * self.reward_weights["voltage_violation_penalty"]
-        return reward
+        violations = sum(
+            1 for v in voltages.values()
+            if not (standards["voltage_min_pu"] <= v <= standards["voltage_max_pu"])
+        )
+        return violations * self.reward_weights["voltage_violation_penalty"]
+
+    def _calculate_base_reward(self, cost, voltages):
+        """电网运营商模式：系统总成本 + 电压惩罚"""
+        return -cost * self.reward_weights["cost_penalty_factor"] + self._get_voltage_penalty(voltages)
+
+    def _calculate_station_operator_reward(self, physical_actions, price_now, info):
+        """
+        充电站运营商模式：
+        r_ops,t = Σ[(π_uc - π_t) * P_charge * η_c + (π_t - π_ud) * P_discharge / η_d] * Δt - C_p
+        """
+        cfg = self.station_operator_cfg
+        step_h = self.params['step_minutes'] / 60.0
+
+        ev_powers_kw = np.asarray(physical_actions.get('ev_power', []), dtype=float)
+        charge_kw = np.clip(ev_powers_kw, 0.0, None)
+        discharge_kw = np.clip(-ev_powers_kw, 0.0, None)
+
+        pi_uc = float(cfg.get("charge_service_price", 1.20))
+        pi_ud = float(cfg.get("v2g_subsidy_price", 0.80))
+        eta_c = max(self.ev_params.charge_efficiency, 1e-6)
+        eta_d = max(self.ev_params.discharge_efficiency, 1e-6)
+
+        charge_profit = float(np.sum((pi_uc - price_now) * charge_kw * eta_c * step_h))
+        discharge_profit = float(np.sum((price_now - pi_ud) * discharge_kw / eta_d * step_h))
+        gross_profit = charge_profit + discharge_profit
+
+        extra_cost = 0.0
+        if cfg.get("include_grid_cost", False):
+            extra_cost += info.get("grid_purchase_cost", 0.0)
+        if cfg.get("include_generation_cost", True):
+            extra_cost += info.get("generation_cost", 0.0)
+        if cfg.get("include_ess_cost", True):
+            extra_cost += info.get("ess_discharge_cost", 0.0)
+        if cfg.get("include_sop_loss_cost", True):
+            extra_cost += info.get("sop_loss_cost", 0.0)
+
+        penalty_cost = 0.0
+        if cfg.get("include_penalty_cost", True):
+            penalty_cost += -info.get("voltage_penalty_unscaled", 0.0)
+            penalty_cost += -info.get("opendss_failure_penalty_unscaled", 0.0)
+
+        net_profit = gross_profit - extra_cost - penalty_cost
+
+        info["charge_service_profit"] = charge_profit
+        info["v2g_spread_profit"] = discharge_profit
+        info["station_gross_profit"] = gross_profit
+        info["station_extra_cost"] = extra_cost
+        info["station_penalty_cost"] = penalty_cost
+        info["station_net_profit"] = net_profit
+
+        return net_profit
 
     def _prepare_ev_simulation_data(self):
         """(多充电站版) 准备聚合了所有充电站EV信息的仿真数据。"""
@@ -535,19 +624,19 @@ class PowerGridEnv(gym.Env):
         action_copy[idx : idx + self.total_spots] = ev_action_masked
         idx += self.total_spots
 
-        # --- ESS 和 PV/Wind 的动作解码 (无需掩码) ---
+        # --- ESS 和 PV/Wind 的动作解码---
         idx += len(self.ess_list)
         idx += len(self.pvw_list)
 
         # 为SOP添加动作掩码
-        # 理由：如果某个SOP在配置中被设为非活动(active=False)，则强制其P和Q的动作为0，防止RL智能体对其进行无效探索。
+        # 如果某个SOP在配置中被设为非活动(active=False)，则强制其P和Q的动作为0，防止RL智能体对其进行无效探索。
         sop_p_start_idx = idx
         sop_q_start_idx = idx + len(self.sop_list)
         for i, sop in enumerate(self.sop_list):
             if not sop.active:
                 action_copy[sop_p_start_idx + i] = 0.0
                 action_copy[sop_q_start_idx + i] = 0.0
-        # 注：NOP的动作是决定其“是否闭合”，是决策本身，因此不适用此处的“活动状态”掩码。
+        # 注：NOP的动作是决定其“是否闭合”，是决策本身，因此不适用此处的掩码。
 
         # --- 从已处理过的 action_copy 数组中解码所有物理动作 ---
         # 重置idx以从头开始解码
@@ -751,7 +840,7 @@ class PowerGridEnv(gym.Env):
         def nop_p_limit2_rule(m, nop_id):
             return m.nop_p[nop_id] >= -M * m.nop_status[nop_id]
 
-       
+        # ... (NOP Q 和 V 的约束类似) ...
 
         # 线路容量约束
         LINE_CAPACITY_PU = 5.0

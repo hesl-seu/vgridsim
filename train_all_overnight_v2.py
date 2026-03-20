@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 training_all_parallel.py
-并行启动 SAC、DDPG、TD3、PPO 的训练，适合长时间训练。
+并行启动 SAC、DDPG、TD3、PPO 的训练，适合“跑一晚上”。
 - 为每个算法开一个子进程（调用现有 train_*.py）
 - 限制每个进程的 CPU 线程数量
 - 统一归档每个子进程的模型/图表/数据到 runs/<run_id>/<Algo>/artifacts
@@ -97,7 +97,6 @@ def launch_one(algo: str, run_dir: Path, per_threads: int, nice: str, total_step
         pre_cmd = ["nice", "-n", level]
 
     cmd = pre_cmd + [sys.executable, str(script_path)]
-    # 提示：如果你的 train_*.py 支持命令行参数（如 --total-steps），也可以在此追加
 
     print(f"[LAUNCH] {algo}: {' '.join(cmd)}")
     print(f"[DIR]    {work_dir}")

@@ -10,15 +10,13 @@ import importlib.util
 from PySide6.QtCore import QObject, Signal, Slot
 import pandas as pd
 
-
-
 # 导入stable_baselines3和环境
 from stable_baselines3 import PPO, DDPG, SAC, TD3
 from stable_baselines3.common.callbacks import BaseCallback
 from power_grid_env import PowerGridEnv
 
 # 导入项目中的核心函数
-from config import PATHS, CORE_PARAMS, TRAINING_CONFIG
+from config import PATHS, CORE_PARAMS, TRAINING_CONFIG, RL_ENV_CONFIG
 from evaluate_agents import evaluate_baseline, evaluate_rl_agent, plot_and_save_results, \
     plot_accumulated_costs, plot_voltage_snapshots, plot_line_flow_snapshots_comparison, \
     plot_aggregated_ev_power, plot_sop_flows, plot_nop_status
@@ -98,7 +96,7 @@ class SimulationWorker(QObject):
         sys.stderr = Stream(new_text=self.error.emit)
 
         try:
-            #所有耗时操作都在run()函数内部，确保它们在后台线程执行 
+            # 所有耗时操作都在run()函数内部，确保它们在后台线程执行
             self.progress.emit("后台任务启动，正在准备环境...")
 
             with open(PATHS["gui_settings"], 'r') as f:
@@ -135,11 +133,46 @@ class SimulationWorker(QObject):
         CORE_PARAMS['sop_nodes_active'] = self.gui_params['use_sop']
         CORE_PARAMS['nop_nodes_active'] = self.gui_params['use_nop']
 
-        #将EV数据源设置传递给核心参数
+        # 将EV数据源设置传递给核心参数
         # 我们从 self.gui_params 中获取这个新设置
         # 如果设置不存在 (例如使用旧的 gui_settings.json)，则默认为 'random'
         CORE_PARAMS['ev_data_source'] = self.gui_params.get('ev_data_source', 'random')
-  
+
+        # EV 物理参数
+        CORE_PARAMS['ev_params'] = self.gui_params.get(
+            'ev_params',
+            CORE_PARAMS.get('ev_params', {})
+        )
+
+        # 奖励模式
+        CORE_PARAMS['reward_mode'] = self.gui_params.get('reward_mode', 'grid_operator')
+
+        # 运营商参数
+        CORE_PARAMS['station_operator'] = self.gui_params.get(
+            'station_operator',
+            CORE_PARAMS.get('station_operator', {})
+        )
+
+        # 奖励权重
+        gui_rw = self.gui_params.get('reward_weights', {})
+        CORE_PARAMS['reward_weights'] = gui_rw
+
+        RL_ENV_CONFIG['reward_weights']['ev_kwh_shortage_penalty'] = gui_rw.get(
+            'ev_kwh_shortage_penalty',
+            RL_ENV_CONFIG['reward_weights']['ev_kwh_shortage_penalty']
+        )
+        RL_ENV_CONFIG['reward_weights']['voltage_violation_penalty'] = gui_rw.get(
+            'voltage_violation_penalty',
+            RL_ENV_CONFIG['reward_weights']['voltage_violation_penalty']
+        )
+        RL_ENV_CONFIG['reward_weights']['cost_penalty_factor'] = gui_rw.get(
+            'cost_penalty_factor',
+            RL_ENV_CONFIG['reward_weights']['cost_penalty_factor']
+        )
+        RL_ENV_CONFIG['penalties']['opendss_failure_penalty'] = gui_rw.get(
+            'opendss_failure_penalty',
+            RL_ENV_CONFIG['penalties']['opendss_failure_penalty']
+        )
 
         self.progress.emit("核心配置已根据GUI设置更新。")
 
@@ -157,12 +190,12 @@ class SimulationWorker(QObject):
         self.progress.emit(f"选择算法: {rl_algo_name}")
         self.progress.emit(f"运行模式: {'两阶段' if use_two_stage else '单阶段'}")
 
-        # 环境初始化是一个耗时操作，必须在后台线程中执行 
+        # 环境初始化是一个耗时操作，必须在后台线程中执行
         self.progress.emit("正在初始化仿真环境 (这可能需要一些时间)...")
         env = PowerGridEnv(gui_params=CORE_PARAMS, use_two_stage_flow=use_two_stage)
         self.progress.emit("环境初始化完成。")
 
-        from training_visualizer import CostCurveCallback  # ← 新增导入
+        from training_visualizer import CostCurveCallback
 
         model = model_class('MlpPolicy', env, verbose=1, tensorboard_log=PATHS["tensorboard_logs"])
 
@@ -198,7 +231,7 @@ class SimulationWorker(QObject):
         except Exception as _:
             pass
 
-        # 保存模型（保持你原有逻辑即可）
+        # 保存模型
         model.save(os.path.join(save_path, "best_model.zip"))
         self.progress.emit(f"模型已保存至: {save_path}")
 
@@ -213,7 +246,6 @@ class SimulationWorker(QObject):
             model.save(os.path.join(save_path, "best_model.zip"))
             self.progress.emit(f"模型已保存至: {save_path}")
 
-    # (run_baseline_task 和 run_evaluation_task 函数无需修改，故省略以保持简洁)
     def run_baseline_task(self):
         self.progress.emit("\n--- 开始运行 Baseline (基于求解器) ---")
         use_two_stage = self.task_params['mode'] == 'two_stage'

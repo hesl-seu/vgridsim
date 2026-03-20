@@ -28,7 +28,6 @@ class EVChargeSession:
 class GEVStation:
     """
     G-EVs充电站模块。
-    此版本重点修复了充电桩分配逻辑，确保时空唯一性。
     """
     def __init__(self, station_id: str, num_spots: int = 30, ev_params: EVParameters = None):
         self.station_id = station_id

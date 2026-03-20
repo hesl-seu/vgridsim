@@ -34,9 +34,8 @@ def export_simulation_data_to_excel(baseline_data, stations_list, params):
     try:
         with pd.ExcelWriter(excel_path, engine='openpyxl') as writer:
 
- 
-            #遍历所有充电站，而不仅仅是第一个，以支持多站场景的数据导出。
-            # --- 工作表1: 充电事件调度表 (甘特图的数据源) ---
+            # 理由：遍历所有充电站，而不仅仅是第一个，以支持多站场景的数据导出。
+            # --- 工作表1: 充电事件调度表 ---
             if stations_list:
                 all_events_data = []
                 # 遍历所有充电站
@@ -44,7 +43,7 @@ def export_simulation_data_to_excel(baseline_data, stations_list, params):
                     # 遍历该站的所有充电会话
                     for event in station.daily_sessions:
                         all_events_data.append({
-                            "充电站ID (Station_ID)": station.station_id,  # 新增充电站ID列
+                            "充电站ID (Station_ID)": station.station_id,
                             "充电桩ID (Spot_ID)": event.spot_id + 1,
                             "到达时间 (Arrival_Hour)": event.arrival_hour,
                             "离开时间 (Departure_Hour)": event.departure_hour,
@@ -110,7 +109,6 @@ def export_simulation_data_to_excel(baseline_data, stations_list, params):
     except Exception as e:
         print(f"错误：导出到Excel失败 - {e}")
 
-
 def plot_voltage_snapshots(all_ts_data, seed, gui_params):
     """
     【两阶段对比版】为每个时间步生成一个独立的母线电压对比图。
@@ -128,7 +126,7 @@ def plot_voltage_snapshots(all_ts_data, seed, gui_params):
         print("警告：无法确定有效的步数，跳过电压快照图绘制。")
         return
 
-    # —— 颜色映射+ 自动分配 ——
+    # —— 颜色映射（家族级）+ 自动分配 ——
     algorithms = list(all_ts_data.keys())
 
     def _normalize_algo_name(name: str) -> str:
@@ -249,7 +247,6 @@ def plot_voltage_snapshots(all_ts_data, seed, gui_params):
 
     print(f"✅ 两阶段电压对比快照图已保存至文件夹: {os.path.abspath(output_dir)}")
 
-
 def plot_line_flow_snapshots(all_ts_data, seed, gui_params):
     """
     为每个时间步生成一个独立的线路潮流对比图（柱状图），并保存在新文件夹中。
@@ -315,10 +312,9 @@ def plot_line_flow_snapshots(all_ts_data, seed, gui_params):
 
     print(f"✅ 线路潮流分时快照图已保存至文件夹: {os.path.abspath(output_dir)}")
 
-
 def plot_line_flows(all_ts_data, seed, gui_params):
     """为所有线路有功潮流绘制时序图，并显示最大/最小潮流的包络线。
-    采用与plot_voltage_profiles完全一致的逻辑。
+    采用与plot_voltage_profiles完全一致的健壮逻辑。
     """
     print("正在生成优化版的线路潮流时序图...")
     try:
@@ -338,7 +334,6 @@ def plot_line_flows(all_ts_data, seed, gui_params):
     for i, (algo_name, ts_data) in enumerate(all_ts_data.items()):
         ax = axes[i, 0]
 
- 
         # 正确地获取已经统一格式的 "dict of lists"
         line_powers_dict = ts_data.get('line_powers_data', {})
 
@@ -363,7 +358,7 @@ def plot_line_flows(all_ts_data, seed, gui_params):
             ax.plot(time_axis, max_p, color='red', linestyle='--', label=f'最大潮流 ({np.nanmax(max_p):.3f} pu)')
             ax.plot(time_axis, min_p, color='blue', linestyle='--', label=f'最小潮流 ({np.nanmin(min_p):.3f} pu)')
             ax.fill_between(time_axis, min_p, max_p, color='lightgreen', alpha=0.3)
-    
+        # ▲▲▲▲▲ 【修正结束】 ▲▲▲▲▲
 
         ax.set_title(f'算法: {algo_name}')
         ax.set_ylabel('有功潮流 P (pu)')
@@ -457,7 +452,6 @@ def plot_ev_spot_powers(baseline_data, gui_params):
 
 def generate_baseline_reports(baseline_data, gui_params):
     """
-    (v2.0)
     根据Baseline的结果，生成分时段的电压/潮流图，
     绘制总EV负荷曲线，并保存详细数据到Excel。
     """
@@ -555,7 +549,7 @@ def generate_baseline_reports(baseline_data, gui_params):
         flow_df.to_excel(writer, sheet_name='Line_Flows')
 
     print(f"详细的电压与潮流数据已保存至Excel文件: {excel_path}")
-    # 绘制并保存总充电负荷曲线 
+    #绘制并保存总充电负荷曲线
     print("...正在生成总充电负荷曲线图")
     try:
         if spot_powers_data:
@@ -601,8 +595,6 @@ def generate_baseline_reports(baseline_data, gui_params):
 
     except Exception as e:
         print(f"错误：生成总充电负荷曲线图时失败 - {e}")
-
-
 import matplotlib.pyplot as plt
 import os
 
@@ -668,8 +660,6 @@ def plot_spot_schedule_gantt(stations_list, target_spot_id=0):
         print(f"错误：保存图像失败 - {e}")
 
     plt.close(fig)  # 关闭图像，防止在后台滞留
-
-
 
 def plot_ess_soc(baseline_data, params):
     """
@@ -786,9 +776,6 @@ def plot_nop_status(baseline_data, params):
     plt.savefig(output_filename)
     plt.close()
     print(f"成功！NOP状态图像已保存至: {os.path.abspath(output_filename)}")
-
-
-# file: visualization.py (在文件末尾添加)
 
 def plot_line_flow_snapshots_comparison(all_ts_data, seed, gui_params):
     """

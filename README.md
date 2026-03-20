@@ -1,5 +1,4 @@
 # VGridSim: 面向车网互动的人工智能调控算法开源测试平台
-（目前是中文版介绍，后续将推出英文版）
 
 **VGridSim** 是一个专为车网互动（Vehicle-to-Grid, V2G）场景设计的人工智能调控算法开源测试平台。
 
@@ -27,7 +26,6 @@
 VGridSim/
 ├── fpowerkit/                  # 内置的修改版电力系统建模工具库
 ├── custom_algorithms/          # 用户自定义算法存放目录
-├── models/                     # 存放着已经训练好的RL模型
 ├── data/                       # 仿真数据
 │   ├── grid_parameters.xlsx    # 配电网详细参数配置
 │   └── my_ev_scenarios.csv     # 自定义电动汽车行程数据
@@ -53,7 +51,7 @@ VGridSim/
 ### 1. 克隆仓库
 
 ```bash
-git clone [https://github.com/Gardener-0/vgridsim.git](https://github.com/hesl-seu/vgridsim.git)
+git clone [https://github.com/Gardener-0/vgridsim.git](https://github.com/Gardener-0/vgridsim.git)
 cd vgridsim
 
 ```
@@ -71,14 +69,11 @@ pip install -r requirements.txt
 
 *提示: 如果需要运行 `baseline.py` (最优基准)，请确保已安装 `Gurobi` (推荐) 或 `CBC` 等优化求解器。*
 
-
-### 上述方法不能正常使用的话，建议直接下载压缩包
-
 ## 🚀 快速开始 (Quick Start)
 
 ### 方式一：使用图形化界面 (GUI)
 
-这是最直观的使用方式，适合进行参数配置、场景预览和单次仿真演示，最推荐的方式。
+这是最直观的使用方式，适合进行参数配置、场景预览和单次仿真演示。
 
 ```bash
 python gui_main.py
@@ -103,7 +98,6 @@ python train_ddpg.py
 
 # 训练 TD3 智能体
 python train_td3.py
-
 ```
 
 ### 方式三：运行最优基准 (Optimal Baseline)
@@ -122,6 +116,12 @@ python baseline.py
 * **经济性**: 系统总运行成本、购电成本、网损成本。
 * **安全性**: 节点电压分布、线路负载率、电压越限惩罚。
 * **用户满意度**: 电动汽车充电满足率 (SoC 达标率)。
+
+可视化脚本 `visualization.py` 可用于生成对比图表。
+
+## 致谢
+
+* **东南大学 胡秦然老师，钱涛老师**
 
 如有问题，欢迎提交 Issue 。
 

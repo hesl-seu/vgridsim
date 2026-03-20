@@ -1,5 +1,3 @@
-
-
 import os
 import pickle
 import numpy as np
@@ -16,7 +14,7 @@ mpl.rcParams['font.sans-serif'] = ['SimHei']
 mpl.rcParams['axes.unicode_minus'] = False
 
 
-# --- Part 1: 用于在训练时收集数据的回调类 ---
+#  用于在训练时收集数据的回调类
 
 class CostCurveCallback(BaseCallback):
     """
@@ -159,7 +157,6 @@ class CostCurveCallback(BaseCallback):
         """当训练正常结束时，自动调用保存数据的方法"""
         self.save_data()
 
-
 def plot_curves():
     """
     (绘图模式)
@@ -178,7 +175,7 @@ def plot_curves():
     # 在 PATHS["models_dir"] 与 项目根目录/runs 下递归查找文件
     def _find_all(filename: str):
         bases = []
-        # 1) models 目录（原有逻辑）
+        # 1) models 目录
         if "models_dir" in PATHS and os.path.isdir(PATHS["models_dir"]):
             bases.append(PATHS["models_dir"])
         # 2) runs 目录（过夜脚本产物归档处）
@@ -286,8 +283,6 @@ def plot_curves():
         print("⚠️ 未加载到任何RL数据。可能原因：1) 训练步数未达到 eval_freq，未生成 *_data.pkl；"
               " 2) 数据仍在 runs/<run_id>/<Algo>/artifacts，但未被检索到；3) 权限/路径错误。")
 
-    # 3. 尝试做“多随机种子聚合”
-    # multi_seed_data 结构：{agent_name: {steps, cost_mean, cost_std, obj_mean, obj_std, num_runs}}
     multi_seed_data = {}
 
     for agent_name in agent_names:

@@ -43,6 +43,11 @@ def make_env(use_two_stage: bool):
         "nop_nodes_active": gui_params.get("use_nop", CORE_PARAMS.get("nop_nodes_active", True)),
         "slack_bus": CORE_PARAMS.get("slack_bus", "b1"),
         "base_power": CORE_PARAMS.get("base_power", 1.0),
+        "ev_data_source": gui_params.get("ev_data_source", CORE_PARAMS.get("ev_data_source", "random")),
+        "ev_params": gui_params.get("ev_params", CORE_PARAMS.get("ev_params", {})),
+        "reward_weights": gui_params.get("reward_weights", CORE_PARAMS.get("reward_weights", {})),
+        "reward_mode": gui_params.get("reward_mode", CORE_PARAMS.get("reward_mode", "grid_operator")),
+        "station_operator": gui_params.get("station_operator", CORE_PARAMS.get("station_operator", {})),
     }
     return PowerGridEnv(gui_params=params, use_two_stage_flow=use_two_stage)
 
@@ -169,8 +174,8 @@ def main():
 
     cost_curve_cb = CostCurveCallback(
         eval_env=eval_env_raw,
-        agent_name=agent_name_for_plot,  # <--- (1) 添加缺失的 agent_name
-        save_path=BEST_MODEL_DIR,  # <--- (2) 修正参数名 log_dir -> save_path
+        agent_name=agent_name_for_plot,
+        save_path=BEST_MODEL_DIR,
         eval_freq=COST_CURVE_EVAL_FREQ
     )
 

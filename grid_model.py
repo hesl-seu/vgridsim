@@ -7,7 +7,7 @@
 3.  从外部数据文件 `data/grid_parameters.xlsx` 中读取详细的、自定义的组件参数，
     包括负荷曲线、电价、发电机、分布式能源（光伏、风电、储能）、以及软开关（SOP/NOP）。
 4.  将从数据文件中读取的参数加载到基础电网模型中，覆盖或添加相应的组件。
-5.  包含健壮性修复和参数标准化逻辑，确保生成的电网对象在不同环境下行为一致。
+5.  包含参数标准化逻辑，确保生成的电网对象在不同环境下行为一致。
 """
 
 import os
@@ -77,18 +77,17 @@ def load_generators_from_excel(grid):
             # 使用列表推导式来安全地获取并移除所有现有的发电机
             for gen_id in [g.ID for g in grid.Gens]:
                 grid.DelGen(gen_id)
-            #print(f"--- 诊断信息：已清除所有默认发电机。---")
+
 
         # 遍历Excel中的每一行，创建并添加新的发电机
         for _, row in df_gens.iterrows():
-            # 确保所有必需的列都存在，以进行健壮的数据加载
+            # 确保所有必需的列都存在，以进行数据加载
             required_cols = ["ID", "BusID", "Pmax_pu", "Pmin_pu", "Qmax_pu", "Qmin_pu", "CostA", "CostB", "CostC",
                              "RealisticPmax_pu"]
             if not all(col in row for col in required_cols):
                 print(f"警告: Generators工作表中缺少必要列，跳过行: {row.to_dict()}")
                 continue
 
-            #print(f"--- 诊断信息：正在从Excel加载发电机 '{row['ID']}' 并放置到母线 '{row['BusID']}'... ---")
 
             gen = Generator(
                 id=str(row["ID"]),
@@ -107,7 +106,6 @@ def load_generators_from_excel(grid):
             # 将从Excel创建的发电机添加到电网中
             grid.AddGen(gen)
 
-        #print("--- 诊断信息：已成功从Excel加载并配置所有自定义发电机。 ---")
 
     except Exception as e:
         # 如果工作表不存在或读取失败，则打印警告，并继续使用案例自带的默认发电机
@@ -184,7 +182,6 @@ def load_bus_loads(grid, gui_params):
     try:
         # 使用动态构建的Sheet页名称来读取数据
         df = pd.read_excel(PATHS["grid_params_excel"], sheet_name=sheet_name_to_load)
-        #print(f"--- 诊断信息：成功从 '{GRID_PARAMS_FILE}' 的 '{sheet_name_to_load}' Sheet页读取了 {len(df)} 行数据。---")
     except Exception as e:
         print(f"--- 致命错误：加载母线负荷失败！未能读取 '{sheet_name_to_load}' Sheet页。---")
         print(f"--- 错误信息是: {e} ---")
@@ -428,9 +425,9 @@ def create_ieee_grid(model="ieee33"):
 
 def create_grid(model="ieee33", gui_params=None):
     """
-    创建完整配电网模型的主函数。
+    (健壮性增强版) 创建完整配电网模型的主函数。
 
-    它按顺序执行以下操作：
+    这是一个工厂函数，它按顺序执行以下操作：
     1. 创建一个基础的IEEE电网拓扑。
     2. 手动设置和修正关键的电网基准参数（SB, UB），以保证兼容性。
     3. 调用所有其他的 `load_*` 函数，将Excel中的自定义数据加载并应用到电网对象上。
@@ -483,7 +480,7 @@ def create_grid(model="ieee33", gui_params=None):
         print(
             f"最终发电机配置 {gen.ID} (在母线 {gen.BusID}): RealisticPmax={getattr(gen, 'RealisticPmax', 'N/A')}, CostB={gen.CostB(0)}")
 
-    # 5. 为每个NOP在电网中添加一条对应的、默认不激活的线路。
+    # 5. [模型处理] 为每个NOP在电网中添加一条对应的、默认不激活的线路。
     # 这是为了在优化模型中通过控制这条线路的激活状态来模拟NOP的开断。
     if hasattr(grid, 'NOPs'):
         for nop_id, nop in grid.NOPs.items():
