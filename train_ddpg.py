@@ -18,7 +18,7 @@ from stable_baselines3.common.noise import NormalActionNoise
 
 from power_grid_env import PowerGridEnv
 from training_visualizer import CostCurveCallback
-from config import PATHS, CORE_PARAMS, TRAINING_CONFIG, load_gui_settings
+from config import PATHS, CORE_PARAMS, TRAINING_CONFIG, load_gui_settings, get_effective_rl_hyperparams
 
 
 def make_env(use_two_stage: bool):
@@ -119,11 +119,22 @@ def main():
         traceback.print_exc()
         return
 
-    # 动作噪声（DDPG/TD3 必备）
+    gui_hparams = get_effective_rl_hyperparams("DDPG", gui_settings=load_gui_settings())
+    common_params = gui_hparams.get("common", {})
+    specific_params = gui_hparams.get("specific", {})
+    ddpg_params = TRAINING_CONFIG.get("ddpg_params", {})
+
+    learning_rate = float(ddpg_params.get("learning_rate", common_params.get("learning_rate", 1e-3)))
+    gamma = float(ddpg_params.get("gamma", common_params.get("gamma", 0.99)))
+    batch_size = int(ddpg_params.get("batch_size", common_params.get("batch_size", 256)))
+    tau = float(ddpg_params.get("tau", specific_params.get("tau", 0.005)))
+    action_noise_sigma = float(ddpg_params.get("action_noise", specific_params.get("action_noise", 0.1)))
+
+    # 动作噪声（DDPG 必备）
     action_dim = train_env.action_space.shape[0]
     action_noise = NormalActionNoise(
         mean=np.zeros(action_dim, dtype=np.float32),
-        sigma=0.3 * np.ones(action_dim, dtype=np.float32)
+        sigma=action_noise_sigma * np.ones(action_dim, dtype=np.float32)
     )
 
     # 模型
@@ -134,12 +145,12 @@ def main():
         verbose=1,
         seed=RANDOM_SEED,
         action_noise=action_noise,
-        learning_rate=1e-3,  # 学不动→先用 1e-3；若不稳再降到 3e-4
+        learning_rate=learning_rate,
         buffer_size=200_000,  # 更大经验缓冲，提升样本多样性
         learning_starts=2_000,  # 先攒 2k 步再训练，避免早期过拟合噪声
-        batch_size=256,  # 较大的批量，配合上面的 buffer
-        tau=0.005,  # 目标网络软更新率（稳定器）
-        gamma=0.99,  # 时序折扣
+        batch_size=batch_size,
+        tau=tau,
+        gamma=gamma,
         train_freq=(1, "step"),  # 每步收集后就触发更新
         gradient_steps=2,  # 每次更新做 2 个梯度步（学不动→2~4，不稳→1）
         policy_kwargs=dict(net_arch=[256, 256]),  # 更厚一点的 MLP

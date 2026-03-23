@@ -13,16 +13,81 @@ import pandas as pd
 # 导入stable_baselines3和环境
 from stable_baselines3 import PPO, DDPG, SAC, TD3
 from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.noise import NormalActionNoise
+import numpy as np
 from power_grid_env import PowerGridEnv
 
 # 导入项目中的核心函数
-from config import PATHS, CORE_PARAMS, TRAINING_CONFIG, RL_ENV_CONFIG
+from config import PATHS, CORE_PARAMS, TRAINING_CONFIG, RL_ENV_CONFIG, get_effective_rl_hyperparams
 from evaluate_agents import evaluate_baseline, evaluate_rl_agent, plot_and_save_results, \
     plot_accumulated_costs, plot_voltage_snapshots, plot_line_flow_snapshots_comparison, \
     plot_aggregated_ev_power, plot_sop_flows, plot_nop_status
 from copy import deepcopy
 from config import EVALUATION_CONFIG
 
+def build_model_kwargs(model_class, rl_algo_name: str, env, gui_params: dict) -> tuple[str, dict]:
+    """根据 GUI 设置构造 SB3 模型初始化参数。"""
+    algo_key = str(rl_algo_name).upper()
+    try:
+        if issubclass(model_class, PPO):
+            algo_key = "PPO"
+        elif issubclass(model_class, SAC):
+            algo_key = "SAC"
+        elif issubclass(model_class, DDPG):
+            algo_key = "DDPG"
+        elif issubclass(model_class, TD3):
+            algo_key = "TD3"
+    except TypeError:
+        pass
+
+    merged = get_effective_rl_hyperparams(algo_key, gui_settings=gui_params)
+    common = merged.get("common", {})
+    specific = merged.get("specific", {})
+
+    kwargs = {
+        "verbose": 1,
+        "tensorboard_log": PATHS["tensorboard_logs"],
+    }
+
+    if algo_key == "PPO":
+        kwargs.update({
+            "learning_rate": float(common.get("learning_rate", 3e-4)),
+            "gamma": float(common.get("gamma", 0.99)),
+            "batch_size": int(common.get("batch_size", 256)),
+            "clip_range": float(specific.get("clip_range", 0.2)),
+            "ent_coef": float(specific.get("ent_coef", 0.0)),
+        })
+    elif algo_key == "SAC":
+        kwargs.update({
+            "learning_rate": float(common.get("learning_rate", 3e-4)),
+            "gamma": float(common.get("gamma", 0.99)),
+            "batch_size": int(common.get("batch_size", 256)),
+            "tau": float(specific.get("tau", 0.005)),
+            "ent_coef": float(specific.get("ent_coef", 0.1)),
+        })
+    elif algo_key == "DDPG":
+        action_dim = env.action_space.shape[0]
+        noise_sigma = float(specific.get("action_noise", 0.1))
+        kwargs.update({
+            "learning_rate": float(common.get("learning_rate", 1e-3)),
+            "gamma": float(common.get("gamma", 0.99)),
+            "batch_size": int(common.get("batch_size", 256)),
+            "tau": float(specific.get("tau", 0.005)),
+            "action_noise": NormalActionNoise(
+                mean=np.zeros(action_dim, dtype=np.float32),
+                sigma=noise_sigma * np.ones(action_dim, dtype=np.float32),
+            ),
+        })
+    elif algo_key == "TD3":
+        kwargs.update({
+            "learning_rate": float(common.get("learning_rate", 3e-4)),
+            "gamma": float(common.get("gamma", 0.99)),
+            "batch_size": int(common.get("batch_size", 256)),
+            "policy_delay": int(specific.get("policy_delay", 2)),
+            "target_policy_noise": float(specific.get("target_policy_noise", 0.2)),
+        })
+
+    return algo_key, kwargs
 def discover_rl_algorithms_util():
     """独立的、安全的工具函数，用于发现所有可用的RL算法类。"""
     model_class_registry = {}

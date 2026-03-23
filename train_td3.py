@@ -20,7 +20,7 @@ from stable_baselines3.common.noise import NormalActionNoise
 # 项目内模块
 from power_grid_env import PowerGridEnv
 from training_visualizer import CostCurveCallback
-from config import PATHS, CORE_PARAMS, TRAINING_CONFIG, load_gui_settings
+from config import PATHS, CORE_PARAMS, TRAINING_CONFIG, load_gui_settings, get_effective_rl_hyperparams
 
 
 def make_env(use_two_stage: bool):
@@ -146,16 +146,20 @@ def main():
         return
 
     # ============== 构造 TD3 模型（含动作噪声） ==============
+    gui_hparams = get_effective_rl_hyperparams("TD3", gui_settings=load_gui_settings())
+    common_params = gui_hparams.get("common", {})
+    specific_params = gui_hparams.get("specific", {})
+
     TD3_PARAMS = TRAINING_CONFIG.get("td3_params", {})
 
-    # 应用调优建议作为新的默认值
-    learning_rate = float(TD3_PARAMS.get("learning_rate", 3e-5))
+    learning_rate = float(TD3_PARAMS.get("learning_rate", common_params.get("learning_rate", 3e-4)))
     buffer_size = int(TD3_PARAMS.get("buffer_size", 500_000))
-    batch_size = int(TD3_PARAMS.get("batch_size", 512))
-    target_policy_noise = float(TD3_PARAMS.get("target_policy_noise", 0.05))
+    batch_size = int(TD3_PARAMS.get("batch_size", common_params.get("batch_size", 256)))
+    gamma = float(TD3_PARAMS.get("gamma", common_params.get("gamma", 0.99)))
+    target_policy_noise = float(TD3_PARAMS.get("target_policy_noise", specific_params.get("target_policy_noise", 0.2)))
     # 目标噪声的裁剪范围
     target_noise_clip = float(TD3_PARAMS.get("target_noise_clip", 0.2))
-    policy_delay = int(TD3_PARAMS.get("policy_delay", 3))
+    policy_delay = int(TD3_PARAMS.get("policy_delay", specific_params.get("policy_delay", 2)))
     learning_starts = int(TD3_PARAMS.get("learning_starts", 10_000))
     action_noise_sigma = float(TD3_PARAMS.get("action_noise_sigma", 0.05))
     # 需要先探测动作维度
@@ -171,6 +175,7 @@ def main():
         learning_rate=learning_rate,
         buffer_size=buffer_size,
         batch_size=batch_size,
+        gamma=gamma,
         target_policy_noise=target_policy_noise,
         target_noise_clip=target_noise_clip,
         policy_delay=policy_delay,

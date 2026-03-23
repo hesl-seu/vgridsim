@@ -213,6 +213,33 @@ def load_gui_settings():
         }
         return default_settings
 
+def get_effective_rl_hyperparams(algo_name: str, gui_settings: dict | None = None) -> dict:
+    """
+    统一计算“最终生效”的 RL 超参数。
 
+    优先级：
+    1) GUI 保存的 gui_settings.json
+    2) config.py 中的 RL_HYPERPARAMS 默认值
+
+    返回格式：
+    {
+        "common": {...},
+        "specific": {...}
+    }
+    """
+    algo_key = str(algo_name).upper()
+    settings = gui_settings if isinstance(gui_settings, dict) else load_gui_settings()
+
+    common_defaults = dict(RL_HYPERPARAMS.get("common", {}))
+    specific_defaults = dict(RL_HYPERPARAMS.get("algo_specific", {}).get(algo_key, {}))
+
+    gui_common = dict(settings.get("rl_common", {})) if isinstance(settings, dict) else {}
+    gui_specific_all = settings.get("rl_specific", {}) if isinstance(settings, dict) else {}
+    gui_specific = dict(gui_specific_all.get(algo_key, {})) if isinstance(gui_specific_all, dict) else {}
+
+    return {
+        "common": {**common_defaults, **gui_common},
+        "specific": {**specific_defaults, **gui_specific},
+    }
 
 

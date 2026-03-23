@@ -17,7 +17,7 @@ from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
 
 from power_grid_env import PowerGridEnv
 from training_visualizer import CostCurveCallback
-from config import PATHS, CORE_PARAMS, TRAINING_CONFIG, load_gui_settings
+from config import PATHS, CORE_PARAMS, TRAINING_CONFIG, load_gui_settings, get_effective_rl_hyperparams
 
 
 def make_env(use_two_stage: bool):
@@ -41,7 +41,6 @@ def make_env(use_two_stage: bool):
         "base_power": CORE_PARAMS.get("base_power", 1.0),
     }
     return PowerGridEnv(gui_params=params, use_two_stage_flow=use_two_stage)
-
 
 def main():
     # 路径
@@ -78,15 +77,19 @@ def main():
 
 
 
-    # 可选：PPO 专属超参也统一从 TRAINING_CONFIG 读取（没有就给默认）
+    # PPO 超参数：优先读取 GUI，TRAINING_CONFIG 作为补充覆盖
+    gui_hparams = get_effective_rl_hyperparams("PPO", gui_settings=load_gui_settings())
+    common_params = gui_hparams.get("common", {})
+    specific_params = gui_hparams.get("specific", {})
+
     PPO_PARAMS = TRAINING_CONFIG.get("ppo_params", {})
     n_steps = int(PPO_PARAMS.get("n_steps", 2048))
-    batch_size = int(PPO_PARAMS.get("batch_size", 512))
-    gamma = float(PPO_PARAMS.get("gamma", 0.99))
+    batch_size = int(PPO_PARAMS.get("batch_size", common_params.get("batch_size", 256)))
+    gamma = float(PPO_PARAMS.get("gamma", common_params.get("gamma", 0.99)))
     gae_lambda = float(PPO_PARAMS.get("gae_lambda", 0.95))
-    clip_range = float(PPO_PARAMS.get("clip_range", 0.2))
-    ent_coef = float(PPO_PARAMS.get("ent_coef", 0.01))
-    learning_rate = float(PPO_PARAMS.get("learning_rate", 3e-3))
+    clip_range = float(PPO_PARAMS.get("clip_range", specific_params.get("clip_range", 0.2)))
+    ent_coef = float(PPO_PARAMS.get("ent_coef", specific_params.get("ent_coef", 0.0)))
+    learning_rate = float(PPO_PARAMS.get("learning_rate", common_params.get("learning_rate", 3e-4)))
     max_grad_norm = float(PPO_PARAMS.get("max_grad_norm", 0.5))
     target_kl = float(PPO_PARAMS.get("target_kl", 0.02))
 

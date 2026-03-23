@@ -17,7 +17,7 @@ from stable_baselines3.common.callbacks import CheckpointCallback, EvalCallback
 
 from power_grid_env import PowerGridEnv
 from training_visualizer import CostCurveCallback
-from config import PATHS, CORE_PARAMS, TRAINING_CONFIG, load_gui_settings
+from config import PATHS, CORE_PARAMS, TRAINING_CONFIG, load_gui_settings, get_effective_rl_hyperparams
 
 
 def make_env(use_two_stage: bool):
@@ -84,14 +84,18 @@ def main():
         except ValueError:
             pass
 
+    # SAC 超参数：优先读取 GUI，TRAINING_CONFIG 作为补充覆盖
+    gui_hparams = get_effective_rl_hyperparams("SAC", gui_settings=load_gui_settings())
+    common_params = gui_hparams.get("common", {})
+    specific_params = gui_hparams.get("specific", {})
 
-    # 可选：SAC 专属超参也从 TRAINING_CONFIG 读取（没有就使用默认）
     SAC_PARAMS = TRAINING_CONFIG.get("sac_params", {})
-    learning_rate = SAC_PARAMS.get("learning_rate", 3e-4)
+    learning_rate = SAC_PARAMS.get("learning_rate", common_params.get("learning_rate", 3e-4))
     buffer_size = SAC_PARAMS.get("buffer_size", 1_000_000)
-    batch_size = SAC_PARAMS.get("batch_size", 256)
-    tau = SAC_PARAMS.get("tau", 0.005)
-    gamma = SAC_PARAMS.get("gamma", 0.99)
+    batch_size = SAC_PARAMS.get("batch_size", common_params.get("batch_size", 256))
+    tau = SAC_PARAMS.get("tau", specific_params.get("tau", 0.005))
+    gamma = SAC_PARAMS.get("gamma", common_params.get("gamma", 0.99))
+    ent_coef = SAC_PARAMS.get("ent_coef", specific_params.get("ent_coef", 0.1))
     train_freq = SAC_PARAMS.get("train_freq", 1)
     gradient_steps = SAC_PARAMS.get("gradient_steps", 1)
 
@@ -151,6 +155,7 @@ def main():
         batch_size=batch_size,
         tau=tau,
         gamma=gamma,
+        ent_coef=ent_coef,
         train_freq=train_freq,
         gradient_steps=gradient_steps,
     )
