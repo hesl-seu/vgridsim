@@ -7,12 +7,9 @@ from fpowerkit.grid import Grid
 from .solbase import *
 
 
-# 文件: fpowerkit/soldss.py
-# (import statements)
-
 def interrogate_opendss_generators(dss, audit_stage=""):
     """
-    【终极Debug函数】审问OpenDSS内部的每一个发电机对象，打印其所有关键参数。
+    【Debug函数】审问OpenDSS内部的每一个发电机对象，打印其所有关键参数。（可不看）
     """
     print("\n" + "#" * 25 + f" INTERROGATING OpenDSS GENERATORS ({audit_stage}) " + "#" * 25)
 
@@ -54,7 +51,7 @@ def interrogate_opendss_generators(dss, audit_stage=""):
     print("#" * 85 + "\n")
 def debug_opendss_internals(dss, sb_kva):
     """
-    【终极Debug函数】直接查询OpenDSS内部状态，生成最权威的功率审计报告。
+    【Debug函数】直接查询OpenDSS内部状态，生成最权威的功率审计报告。（可不看）
     """
     print("\n" + "#" * 30 + " INTERNAL OpenDSS STATE AUDIT (Post-Solve) " + "#" * 30)
 
@@ -110,10 +107,6 @@ def debug_opendss_internals(dss, sb_kva):
 
 
 def _convert(il: Island, t: int, source_bus: str):
-    """
-    【V3.4 逻辑修正+Debug版】
-    - 增加了探针C和D，用于追踪Gen和ESS对象的功率值和转换决策。
-    """
     try:
         from py_dss_interface import DSS
     except ImportError:
@@ -151,7 +144,7 @@ def _convert(il: Island, t: int, source_bus: str):
             d.text(
                 f"New Generator.{pid.lower()} bus1={pvw.BusID} phases=3 kv={Ub} kw={p * Sb_kVA} kvar={q * Sb_kVA} model=1")
 
-    # 【修正】处理常规发电机 和 SOP虚拟发电机
+    # 处理常规发电机 和 SOP虚拟发电机
     for gid, gen in il.GenItems():
         if gen.BusID == source_bus: continue
 
@@ -174,7 +167,7 @@ def _convert(il: Island, t: int, source_bus: str):
                 f"vminpu={bus.MinV} vmaxpu={bus.MaxV} yearly=const_shape")
 
 
-    # 【修正】处理储能系统 (ESS)
+    # 处理储能系统 (ESS)
     for eid, ess in il.ESSItems():
         p = ess.P if ess.P is not None else 0.0
         q = ess.Q if ess.Q is not None else 0.0
@@ -212,7 +205,6 @@ class OpenDSSSolver(SolverBase):
 
     def audit_inputs(self, t: int):
         """
-        [新增的诊断功能]
         为给定的时间步配置DSS对象（不进行求解），并返回一个详细的字典，
         其中包含OpenDSS视角下的所有负荷和发电机的参数。
         """
@@ -271,7 +263,7 @@ class OpenDSSSolver(SolverBase):
         self.dss.text("calcv")
         self.dss.text("solve maxcontrol=10000")
 
-        # 1. 回读电压 (逻辑不变)
+        # 1. 回读电压 
         if hasattr(self.dss, "circuit"):
             bnames = self.dss.circuit.buses_names
             bvolt = np.array(self.dss.circuit.buses_volts).reshape(-1, 3, 2)
@@ -299,25 +291,25 @@ class OpenDSSSolver(SolverBase):
             if not line.active: continue
             self.dss.circuit.set_active_element(f"Line.{line.ID.lower()}")
 
-            # ▼▼▼▼▼ 【核心修复 1：正确累加三相线路潮流】 ▼▼▼▼▼
+            # 正确累加三相线路潮流
             powers = self.dss.cktelement.powers  # 返回 [P1, Q1, P2, Q2, P3, Q3]
             # 累加所有相的有功功率和无功功率
             total_p_kw = powers[0] + powers[2] + powers[4]
             total_q_kvar = powers[1] + powers[3] + powers[5]
             line.P = total_p_kw / Sb_kVA
             line.Q = total_q_kvar / Sb_kVA
-            # ▲▲▲▲▲ 【修复结束】 ▲▲▲▲▲
+            
 
         # 3. 回读平衡节点功率
         self.dss.circuit.set_active_element("Vsource.source")
         source_powers_kw_per_phase = self.dss.cktelement.powers
 
-        # ▼▼▼▼▼ 【核心修复 2：正确累加三相购电功率】 ▼▼▼▼▼
+        # 2：正确累加三相购电功率
         # Vsource出力的P值为负，累加后取反得到正的购电功率
         slack_power_kw = -(
                     source_powers_kw_per_phase[0] + source_powers_kw_per_phase[2] + source_powers_kw_per_phase[4])
         slack_power_pu = slack_power_kw / Sb_kVA
-        # ▲▲▲▲▲ 【修复结束】 ▲▲▲▲▲
+       
 
         try:
             gens_on_slack = self.grid.GensAtBus(self.__sbus[il_no])
