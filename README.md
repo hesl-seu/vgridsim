@@ -51,7 +51,7 @@ VGridSim/
 ### 1. 克隆仓库
 
 ```bash
-git clone [https://github.com/Gardener-0/vgridsim.git](https://github.com/Gardener-0/vgridsim.git)
+git clone [https://github.com/hesl-seu/vgridsim.git](https://github.com/Gardener-0/vgridsim.git)
 cd vgridsim
 
 ```
